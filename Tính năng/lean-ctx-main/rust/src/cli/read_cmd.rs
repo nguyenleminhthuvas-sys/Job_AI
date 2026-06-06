@@ -1,0 +1,447 @@
+use std::path::Path;
+
+use crate::core::compressor;
+use crate::core::deps as dep_extract;
+use crate::core::entropy;
+use crate::core::io_boundary;
+use crate::core::patterns::deps_cmd;
+use crate::core::protocol;
+use crate::core::roles;
+use crate::core::signatures;
+
+fn resolve_cli_path(raw: &str) -> String {
+    if let Ok(abs) = std::path::Path::new(raw).canonicalize() {
+        return abs.to_string_lossy().to_string();
+    }
+    if Path::new(raw).is_relative() {
+        if let Ok(cwd) = std::env::current_dir() {
+            return cwd.join(raw).to_string_lossy().into_owned();
+        }
+    }
+    raw.to_string()
+}
+use crate::core::tokens::count_tokens;
+
+use super::common::print_savings;
+
+pub fn cmd_read(args: &[String]) {
+    if args.is_empty() {
+        eprintln!(
+            "Usage: lean-ctx read <file> [--mode auto|full|map|signatures|aggressive|entropy] [--fresh]"
+        );
+        std::process::exit(1);
+    }
+
+    let raw_path = &args[0];
+    let path = if Path::new(raw_path).is_relative() {
+        std::env::current_dir().ok().map_or_else(
+            || raw_path.clone(),
+            |cwd| cwd.join(raw_path).to_string_lossy().into_owned(),
+        )
+    } else {
+        raw_path.clone()
+    };
+    let path = path.as_str();
+    let mode = args
+        .iter()
+        .position(|a| a == "--mode" || a == "-m")
+        .and_then(|i| args.get(i + 1))
+        .map_or("auto", std::string::String::as_str);
+    let force_fresh = args.iter().any(|a| a == "--fresh" || a == "--no-cache");
+
+    let short = protocol::shorten_path(path);
+
+    // Apply the same secret-path policy in CLI mode as in MCP tools.
+    // Default is warn; enforce depends on active role/policy.
+    if let Ok(abs) = std::fs::canonicalize(path) {
+        match io_boundary::check_secret_path_for_tool("cli_read", &abs) {
+            Ok(Some(w)) => eprintln!("{w}"),
+            Ok(None) => {}
+            Err(e) => {
+                eprintln!("{e}");
+                std::process::exit(1);
+            }
+        }
+    } else {
+        // Best-effort: still check the raw path string.
+        let raw = std::path::Path::new(path);
+        match io_boundary::check_secret_path_for_tool("cli_read", raw) {
+            Ok(Some(w)) => eprintln!("{w}"),
+            Ok(None) => {}
+            Err(e) => {
+                eprintln!("{e}");
+                std::process::exit(1);
+            }
+        }
+    }
+
+    #[cfg(unix)]
+    {
+        #[cfg(unix)]
+        if let Some(out) = crate::daemon_client::try_daemon_tool_call_blocking_text(
+            "ctx_read",
+            Some(serde_json::json!({
+                "path": path,
+                "mode": mode,
+                "fresh": force_fresh,
+            })),
+        ) {
+            let filtered = super::common::filter_daemon_output(&out);
+            if !filtered.trim().is_empty() {
+                println!("{filtered}");
+                return;
+            }
+        }
+    }
+    super::common::daemon_fallback_hint();
+
+    if !force_fresh && mode == "full" {
+        use crate::core::cli_cache::{self, CacheResult};
+        match cli_cache::check_and_read(path) {
+            CacheResult::Hit { entry, file_ref } => {
+                let msg = cli_cache::format_hit(&entry, &file_ref, &short);
+                println!("{msg}");
+                let sent = count_tokens(&msg);
+                super::common::cli_track_read_cached(path, "full", entry.original_tokens, sent);
+                return;
+            }
+            CacheResult::Miss { content } if content.is_empty() => {
+                eprintln!("Error: could not read {path}");
+                std::process::exit(1);
+            }
+            CacheResult::Miss { content } => {
+                let line_count = content.lines().count();
+                println!("{short} [{line_count}L]");
+                println!("{content}");
+                let tok = count_tokens(&content);
+                super::common::cli_track_read(path, "full", tok, tok);
+                return;
+            }
+        }
+    }
+
+    let content = match crate::tools::ctx_read::read_file_lossy(path) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Error: {e}");
+            std::process::exit(1);
+        }
+    };
+
+    let ext = Path::new(path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("");
+    let line_count = content.lines().count();
+    let original_tokens = count_tokens(&content);
+
+    let mode = if mode == "auto" {
+        if crate::tools::ctx_read::is_instruction_file(path) {
+            "full".to_string()
+        } else {
+            let sig = crate::core::mode_predictor::FileSignature::from_path(path, original_tokens);
+            let predictor = crate::core::mode_predictor::ModePredictor::new();
+            predictor
+                .predict_best_mode(&sig)
+                .unwrap_or_else(|| "full".to_string())
+        }
+    } else if mode != "full" && crate::tools::ctx_read::is_instruction_file(path) {
+        "full".to_string()
+    } else {
+        mode.to_string()
+    };
+    let mode = mode.as_str();
+
+    match mode {
+        "map" => {
+            let structured = match ext {
+                "md" | "mdx" | "rst" => {
+                    crate::core::structured_read::extract_markdown_outline(&content)
+                }
+                "json" => crate::core::structured_read::extract_json_structure(&content),
+                "yaml" | "yml" => crate::core::structured_read::extract_yaml_structure(&content),
+                "toml" => crate::core::structured_read::extract_toml_structure(&content),
+                _ if path.to_lowercase().ends_with(".lock")
+                    || path.to_lowercase().ends_with("go.sum") =>
+                {
+                    crate::core::structured_read::extract_lock_summary(&content, path)
+                }
+                _ => String::new(),
+            };
+
+            let mut output_buf = if structured.is_empty() {
+                let sigs = signatures::extract_signatures(&content, ext);
+                let dep_info = dep_extract::extract_deps(&content, ext);
+                let mut buf = format!("{short} [{line_count}L]");
+                if !dep_info.imports.is_empty() {
+                    buf.push_str(&format!("\n  deps: {}", dep_info.imports.join(", ")));
+                }
+                if !dep_info.exports.is_empty() {
+                    buf.push_str(&format!("\n  exports: {}", dep_info.exports.join(", ")));
+                }
+                let key_sigs: Vec<_> = sigs
+                    .iter()
+                    .filter(|s| s.is_exported || s.indent == 0)
+                    .collect();
+                if !key_sigs.is_empty() {
+                    buf.push_str("\n  API:");
+                    for sig in &key_sigs {
+                        buf.push_str(&format!("\n    {}", sig.to_compact()));
+                    }
+                }
+                buf
+            } else {
+                format!("{short} [{line_count}L]\n{structured}")
+            };
+
+            let sent = count_tokens(&output_buf);
+            let savings = protocol::append_savings(&output_buf, original_tokens, sent);
+            output_buf = savings;
+            println!("{output_buf}");
+            super::common::cli_track_read(path, "map", original_tokens, sent);
+        }
+        "signatures" => {
+            let sigs = signatures::extract_signatures(&content, ext);
+            let mut output_buf = format!("{short} [{line_count}L]");
+            for sig in &sigs {
+                output_buf.push_str(&format!("\n{}", sig.to_compact()));
+            }
+            println!("{output_buf}");
+            let sent = count_tokens(&output_buf);
+            print_savings(original_tokens, sent);
+            super::common::cli_track_read(path, "signatures", original_tokens, sent);
+        }
+        "aggressive" => {
+            let compressed = compressor::aggressive_compress(&content, Some(ext));
+            println!("{short} [{line_count}L]");
+            println!("{compressed}");
+            let sent = count_tokens(&compressed);
+            print_savings(original_tokens, sent);
+            super::common::cli_track_read(path, "aggressive", original_tokens, sent);
+        }
+        "entropy" => {
+            let result = entropy::entropy_compress(&content);
+            let avg_h = entropy::analyze_entropy(&content).avg_entropy;
+            println!("{short} [{line_count}L] (H̄={avg_h:.1})");
+            for tech in &result.techniques {
+                println!("{tech}");
+            }
+            println!("{}", result.output);
+            let sent = count_tokens(&result.output);
+            print_savings(original_tokens, sent);
+            super::common::cli_track_read(path, "entropy", original_tokens, sent);
+        }
+        _ => {
+            let mut output = format!("{short} [{line_count}L]\n{content}");
+            let config = crate::core::config::Config::load();
+            let level = crate::core::config::CompressionLevel::effective(&config);
+            if level.is_active() {
+                let terse_result = crate::core::terse::pipeline::compress(&output, &level, None);
+                if terse_result.quality_passed && terse_result.savings_pct >= 3.0 {
+                    output = terse_result.output;
+                }
+            }
+            println!("{output}");
+            let sent = count_tokens(&output);
+            super::common::cli_track_read(path, "full", original_tokens, sent);
+        }
+    }
+}
+
+pub fn cmd_diff(args: &[String]) {
+    if args.len() < 2 {
+        eprintln!("Usage: lean-ctx diff <file1> <file2>");
+        std::process::exit(1);
+    }
+
+    let content1 = match crate::tools::ctx_read::read_file_lossy(&args[0]) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Error reading {}: {e}", args[0]);
+            std::process::exit(1);
+        }
+    };
+
+    let content2 = match crate::tools::ctx_read::read_file_lossy(&args[1]) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Error reading {}: {e}", args[1]);
+            std::process::exit(1);
+        }
+    };
+
+    let diff = compressor::diff_content(&content1, &content2);
+    let original = count_tokens(&content1) + count_tokens(&content2);
+    let sent = count_tokens(&diff);
+
+    println!(
+        "diff {} {}",
+        protocol::shorten_path(&args[0]),
+        protocol::shorten_path(&args[1])
+    );
+    println!("{diff}");
+    print_savings(original, sent);
+    crate::core::stats::record("cli_diff", original, sent);
+}
+
+pub fn cmd_grep(args: &[String]) {
+    if args.is_empty() {
+        eprintln!("Usage: lean-ctx grep <pattern> [path]");
+        std::process::exit(1);
+    }
+
+    let pattern = &args[0];
+    let raw_path = args.get(1).map_or(".", std::string::String::as_str);
+    let abs_path = resolve_cli_path(raw_path);
+    let path = abs_path.as_str();
+
+    #[cfg(unix)]
+    {
+        #[cfg(unix)]
+        if let Some(out) = crate::daemon_client::try_daemon_tool_call_blocking_text(
+            "ctx_search",
+            Some(serde_json::json!({
+                "pattern": pattern,
+                "path": path,
+            })),
+        ) {
+            let out = super::common::filter_daemon_output(&out);
+            println!("{out}");
+            if out.trim_start().starts_with("0 matches") {
+                std::process::exit(1);
+            }
+            return;
+        }
+    }
+    super::common::daemon_fallback_hint();
+
+    let (out, original) = crate::tools::ctx_search::handle(
+        pattern,
+        path,
+        None,
+        20,
+        crate::tools::CrpMode::effective(),
+        true,
+        roles::active_role().io.allow_secret_paths,
+    );
+    println!("{out}");
+    super::common::cli_track_search(original, count_tokens(&out));
+    if original == 0 && out.trim_start().starts_with("0 matches") {
+        std::process::exit(1);
+    }
+}
+
+pub fn cmd_find(args: &[String]) {
+    if args.is_empty() {
+        eprintln!("Usage: lean-ctx find <pattern> [path]");
+        std::process::exit(1);
+    }
+
+    let raw_pattern = &args[0];
+    let path = args.get(1).map_or(".", std::string::String::as_str);
+
+    let is_glob = raw_pattern.contains('*') || raw_pattern.contains('?');
+    let glob_matcher = if is_glob {
+        glob::Pattern::new(&raw_pattern.to_lowercase()).ok()
+    } else {
+        None
+    };
+    let substring = raw_pattern.to_lowercase();
+
+    let mut found = false;
+    for entry in ignore::WalkBuilder::new(path)
+        .hidden(true)
+        .git_ignore(true)
+        .git_global(true)
+        .git_exclude(true)
+        .max_depth(Some(10))
+        .build()
+        .flatten()
+    {
+        let name = entry.file_name().to_string_lossy().to_lowercase();
+        let matches = if let Some(ref g) = glob_matcher {
+            g.matches(&name)
+        } else {
+            name.contains(&substring)
+        };
+        if matches {
+            println!("{}", entry.path().display());
+            found = true;
+        }
+    }
+
+    crate::core::stats::record("cli_find", 0, 0);
+
+    if !found {
+        std::process::exit(1);
+    }
+}
+
+pub fn cmd_ls(args: &[String]) {
+    let mut raw_path = ".";
+    let mut depth = 3usize;
+    let mut show_hidden = false;
+    let mut respect_gitignore = true;
+    let mut i = 0;
+
+    while i < args.len() {
+        let arg = &args[i];
+        if arg == "--depth" {
+            i += 1;
+            if let Some(d) = args.get(i).and_then(|s| s.parse::<usize>().ok()) {
+                depth = d.min(10);
+            }
+        } else if arg == "--all" || arg == "-a" {
+            show_hidden = true;
+        } else if arg == "--no-gitignore" {
+            respect_gitignore = false;
+        } else if arg.starts_with('-') {
+            eprintln!("Error: lean-ctx ls does not support flag '{arg}'.\n");
+            eprintln!("lean-ctx ls is a compressed directory tree viewer for AI context, not a drop-in ls replacement.");
+            eprintln!("The shell hook (lean-ctx -t ls {arg} ...) passes flags to system ls transparently.\n");
+            eprintln!("Usage: lean-ctx ls [path] [--depth N] [--all] [--no-gitignore]");
+            std::process::exit(1);
+        } else {
+            raw_path = arg;
+        }
+        i += 1;
+    }
+
+    let abs_path = resolve_cli_path(raw_path);
+    let path = abs_path.as_str();
+
+    #[cfg(unix)]
+    {
+        #[cfg(unix)]
+        if let Some(out) = crate::daemon_client::try_daemon_tool_call_blocking_text(
+            "ctx_tree",
+            Some(serde_json::json!({
+                "path": path,
+                "depth": depth,
+                "show_hidden": show_hidden,
+                "respect_gitignore": respect_gitignore,
+            })),
+        ) {
+            println!("{}", super::common::filter_daemon_output(&out));
+            return;
+        }
+    }
+    super::common::daemon_fallback_hint();
+
+    let (out, _original) =
+        crate::tools::ctx_tree::handle(path, depth, show_hidden, respect_gitignore);
+    println!("{out}");
+    super::common::cli_track_tree(0, count_tokens(&out));
+}
+
+pub fn cmd_deps(args: &[String]) {
+    let path = args.first().map_or(".", std::string::String::as_str);
+
+    if let Some(result) = deps_cmd::detect_and_compress(path) {
+        println!("{result}");
+        crate::core::stats::record("cli_deps", 0, 0);
+    } else {
+        eprintln!("No dependency file found in {path}");
+        std::process::exit(1);
+    }
+}

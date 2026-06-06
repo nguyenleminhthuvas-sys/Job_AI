@@ -1,0 +1,1012 @@
+use std::collections::HashMap;
+use std::path::Path;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
+
+use rayon::prelude::*;
+use serde::{Deserialize, Serialize};
+
+use super::deep_queries;
+use super::graph_index::{normalize_project_root, ProjectIndex, SymbolEntry};
+
+// ---------------------------------------------------------------------------
+// Data types
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CallGraph {
+    pub project_root: String,
+    pub edges: Vec<CallEdge>,
+    pub file_hashes: HashMap<String, String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CallEdge {
+    pub caller_file: String,
+    pub caller_symbol: String,
+    pub caller_line: usize,
+    pub callee_name: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct BfsNode {
+    pub symbol: String,
+    pub file: String,
+    pub line: usize,
+    pub depth: usize,
+    pub from_symbol: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct PathHop {
+    pub symbol: String,
+    pub file: String,
+    pub line: usize,
+}
+
+#[derive(Clone, Copy)]
+enum BfsDirection {
+    Callers,
+    Callees,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RiskLevel {
+    Low,
+    Medium,
+    High,
+    Critical,
+}
+
+impl RiskLevel {
+    pub fn from_caller_count(count: usize) -> Self {
+        match count {
+            0..=1 => Self::Low,
+            2..=4 => Self::Medium,
+            5..=10 => Self::High,
+            _ => Self::Critical,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Low => "LOW",
+            Self::Medium => "MEDIUM",
+            Self::High => "HIGH",
+            Self::Critical => "CRITICAL",
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Background build state (singleton per process)
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize)]
+pub struct BuildProgress {
+    pub status: &'static str,
+    pub files_total: usize,
+    pub files_done: usize,
+    pub edges_found: usize,
+}
+
+enum BuildState {
+    Idle,
+    Building {
+        files_total: usize,
+        files_done: Arc<AtomicUsize>,
+        edges_found: Arc<AtomicUsize>,
+    },
+    Ready(Arc<CallGraph>),
+    Failed(String),
+}
+
+static BUILD: OnceLock<Mutex<BuildState>> = OnceLock::new();
+
+fn global_state() -> &'static Mutex<BuildState> {
+    BUILD.get_or_init(|| Mutex::new(BuildState::Idle))
+}
+
+impl CallGraph {
+    pub fn new(project_root: &str) -> Self {
+        Self {
+            project_root: normalize_project_root(project_root),
+            edges: Vec::new(),
+            file_hashes: HashMap::new(),
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Parallel build — processes files via rayon thread pool
+    // -----------------------------------------------------------------------
+
+    pub fn build_parallel(
+        index: &ProjectIndex,
+        progress: Option<(&AtomicUsize, &AtomicUsize)>,
+    ) -> Self {
+        let project_root = &index.project_root;
+        let symbols_by_file = group_symbols_by_file_owned(index);
+        let file_keys: Vec<String> = index.files.keys().cloned().collect();
+
+        let results: Vec<(String, String, Vec<CallEdge>)> = file_keys
+            .par_iter()
+            .filter_map(|rel_path| {
+                let abs_path = resolve_path(rel_path, project_root);
+                let content = std::fs::read_to_string(&abs_path).ok()?;
+                let hash = simple_hash(&content);
+
+                let ext = Path::new(rel_path)
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .unwrap_or("");
+
+                let analysis = deep_queries::analyze(&content, ext);
+                let file_symbols = symbols_by_file.get(rel_path.as_str());
+
+                let edges: Vec<CallEdge> = analysis
+                    .calls
+                    .iter()
+                    .map(|call| {
+                        let caller_sym = find_enclosing_symbol_owned(file_symbols, call.line + 1);
+                        CallEdge {
+                            caller_file: rel_path.clone(),
+                            caller_symbol: caller_sym,
+                            caller_line: call.line + 1,
+                            callee_name: call.callee.clone(),
+                        }
+                    })
+                    .collect();
+
+                if let Some((done, edge_count)) = progress {
+                    done.fetch_add(1, Ordering::Relaxed);
+                    edge_count.fetch_add(edges.len(), Ordering::Relaxed);
+                }
+
+                Some((rel_path.clone(), hash, edges))
+            })
+            .collect();
+
+        let mut graph = Self::new(project_root);
+        let edge_capacity: usize = results.iter().map(|(_, _, e)| e.len()).sum();
+        graph.edges.reserve(edge_capacity);
+        graph.file_hashes.reserve(results.len());
+
+        for (path, hash, edges) in results {
+            graph.file_hashes.insert(path, hash);
+            graph.edges.extend(edges);
+        }
+
+        graph
+    }
+
+    // -----------------------------------------------------------------------
+    // Incremental parallel build — only re-analyzes changed files
+    // -----------------------------------------------------------------------
+
+    pub fn build_incremental_parallel(
+        index: &ProjectIndex,
+        previous: &CallGraph,
+        progress: Option<(&AtomicUsize, &AtomicUsize)>,
+    ) -> Self {
+        let project_root = &index.project_root;
+        let symbols_by_file = group_symbols_by_file_owned(index);
+        let file_keys: Vec<String> = index.files.keys().cloned().collect();
+
+        let prev_edges_by_file = group_edges_by_file(&previous.edges);
+
+        let results: Vec<(String, String, Vec<CallEdge>)> = file_keys
+            .par_iter()
+            .filter_map(|rel_path| {
+                let abs_path = resolve_path(rel_path, project_root);
+                let content = std::fs::read_to_string(&abs_path).ok()?;
+                let hash = simple_hash(&content);
+                let changed = previous.file_hashes.get(rel_path.as_str()) != Some(&hash);
+
+                let edges = if changed {
+                    let ext = Path::new(rel_path)
+                        .extension()
+                        .and_then(|e| e.to_str())
+                        .unwrap_or("");
+
+                    let analysis = deep_queries::analyze(&content, ext);
+                    let file_symbols = symbols_by_file.get(rel_path.as_str());
+
+                    analysis
+                        .calls
+                        .iter()
+                        .map(|call| {
+                            let caller_sym =
+                                find_enclosing_symbol_owned(file_symbols, call.line + 1);
+                            CallEdge {
+                                caller_file: rel_path.clone(),
+                                caller_symbol: caller_sym,
+                                caller_line: call.line + 1,
+                                callee_name: call.callee.clone(),
+                            }
+                        })
+                        .collect()
+                } else {
+                    prev_edges_by_file
+                        .get(rel_path.as_str())
+                        .cloned()
+                        .unwrap_or_default()
+                };
+
+                if let Some((done, edge_count)) = progress {
+                    done.fetch_add(1, Ordering::Relaxed);
+                    edge_count.fetch_add(edges.len(), Ordering::Relaxed);
+                }
+
+                Some((rel_path.clone(), hash, edges))
+            })
+            .collect();
+
+        let mut graph = Self::new(project_root);
+        let edge_capacity: usize = results.iter().map(|(_, _, e)| e.len()).sum();
+        graph.edges.reserve(edge_capacity);
+        graph.file_hashes.reserve(results.len());
+
+        for (path, hash, edges) in results {
+            graph.file_hashes.insert(path, hash);
+            graph.edges.extend(edges);
+        }
+
+        graph
+    }
+
+    // -----------------------------------------------------------------------
+    // Public API: non-blocking access for the dashboard
+    // -----------------------------------------------------------------------
+
+    /// Returns the cached graph immediately, or `None` + starts a background build.
+    pub fn get_or_start_build(
+        project_root: &str,
+        index: Arc<ProjectIndex>,
+    ) -> Result<Arc<CallGraph>, BuildProgress> {
+        let state = global_state();
+        let mut guard = state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+
+        match &*guard {
+            BuildState::Ready(graph) => return Ok(Arc::clone(graph)),
+            BuildState::Building {
+                files_total,
+                files_done,
+                edges_found,
+            } => {
+                return Err(BuildProgress {
+                    status: "building",
+                    files_total: *files_total,
+                    files_done: files_done.load(Ordering::Relaxed),
+                    edges_found: edges_found.load(Ordering::Relaxed),
+                });
+            }
+            BuildState::Failed(msg) => {
+                tracing::warn!("[call_graph: previous build failed: {msg} — retrying]");
+            }
+            BuildState::Idle => {}
+        }
+
+        // Try serving from disk cache first
+        if let Some(cached) = Self::load(project_root) {
+            if !cache_looks_stale(&cached, &index) {
+                let arc = Arc::new(cached);
+                *guard = BuildState::Ready(Arc::clone(&arc));
+                return Ok(arc);
+            }
+        }
+
+        let files_total = index.files.len();
+        let files_done = Arc::new(AtomicUsize::new(0));
+        let edges_found = Arc::new(AtomicUsize::new(0));
+
+        *guard = BuildState::Building {
+            files_total,
+            files_done: Arc::clone(&files_done),
+            edges_found: Arc::clone(&edges_found),
+        };
+        drop(guard);
+
+        let root = normalize_project_root(project_root);
+        let fd = Arc::clone(&files_done);
+        let ef = Arc::clone(&edges_found);
+
+        std::thread::spawn(move || {
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let previous = CallGraph::load(&root);
+                if let Some(prev) = &previous {
+                    CallGraph::build_incremental_parallel(&index, prev, Some((&fd, &ef)))
+                } else {
+                    CallGraph::build_parallel(&index, Some((&fd, &ef)))
+                }
+            }));
+
+            match result {
+                Ok(graph) => {
+                    let _ = graph.save();
+                    let arc = Arc::new(graph);
+                    if let Ok(mut g) = global_state().lock() {
+                        *g = BuildState::Ready(Arc::clone(&arc));
+                    }
+                    tracing::info!(
+                        "[call_graph: build complete — {} files, {} edges]",
+                        arc.file_hashes.len(),
+                        arc.edges.len()
+                    );
+                }
+                Err(e) => {
+                    let msg = format!("{e:?}");
+                    tracing::error!("[call_graph: build panicked: {msg}]");
+                    if let Ok(mut g) = global_state().lock() {
+                        *g = BuildState::Failed(msg);
+                    }
+                }
+            }
+        });
+
+        Err(BuildProgress {
+            status: "building",
+            files_total,
+            files_done: 0,
+            edges_found: 0,
+        })
+    }
+
+    /// Returns current build status without starting anything.
+    pub fn build_status() -> BuildProgress {
+        let state = global_state();
+        let guard = state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        match &*guard {
+            BuildState::Idle => BuildProgress {
+                status: "idle",
+                files_total: 0,
+                files_done: 0,
+                edges_found: 0,
+            },
+            BuildState::Building {
+                files_total,
+                files_done,
+                edges_found,
+            } => BuildProgress {
+                status: "building",
+                files_total: *files_total,
+                files_done: files_done.load(Ordering::Relaxed),
+                edges_found: edges_found.load(Ordering::Relaxed),
+            },
+            BuildState::Ready(graph) => BuildProgress {
+                status: "ready",
+                files_total: graph.file_hashes.len(),
+                files_done: graph.file_hashes.len(),
+                edges_found: graph.edges.len(),
+            },
+            BuildState::Failed(msg) => {
+                tracing::debug!("[call_graph: status check — failed: {msg}]");
+                BuildProgress {
+                    status: "error",
+                    files_total: 0,
+                    files_done: 0,
+                    edges_found: 0,
+                }
+            }
+        }
+    }
+
+    /// Force-invalidate the cached result so next request triggers a rebuild.
+    pub fn invalidate() {
+        if let Ok(mut g) = global_state().lock() {
+            *g = BuildState::Idle;
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Legacy synchronous API (kept for non-dashboard callers)
+    // -----------------------------------------------------------------------
+
+    pub fn build(index: &ProjectIndex) -> Self {
+        Self::build_parallel(index, None)
+    }
+
+    pub fn build_incremental(index: &ProjectIndex, previous: &CallGraph) -> Self {
+        Self::build_incremental_parallel(index, previous, None)
+    }
+
+    pub fn callers_of(&self, symbol: &str) -> Vec<&CallEdge> {
+        let sym_lower = symbol.to_lowercase();
+        self.edges
+            .iter()
+            .filter(|e| e.callee_name.to_lowercase() == sym_lower)
+            .collect()
+    }
+
+    pub fn callees_of(&self, symbol: &str) -> Vec<&CallEdge> {
+        let sym_lower = symbol.to_lowercase();
+        self.edges
+            .iter()
+            .filter(|e| e.caller_symbol.to_lowercase() == sym_lower)
+            .collect()
+    }
+
+    // -----------------------------------------------------------------------
+    // Multi-hop BFS traversal
+    // -----------------------------------------------------------------------
+
+    /// BFS callers up to `max_depth` hops. Returns (symbol, file, line, depth) per node.
+    pub fn bfs_callers(&self, symbol: &str, max_depth: usize) -> Vec<BfsNode> {
+        self.bfs_traverse(symbol, max_depth, BfsDirection::Callers)
+    }
+
+    /// BFS callees up to `max_depth` hops. Returns (symbol, file, line, depth) per node.
+    pub fn bfs_callees(&self, symbol: &str, max_depth: usize) -> Vec<BfsNode> {
+        self.bfs_traverse(symbol, max_depth, BfsDirection::Callees)
+    }
+
+    fn bfs_traverse(&self, symbol: &str, max_depth: usize, dir: BfsDirection) -> Vec<BfsNode> {
+        use std::collections::{HashSet, VecDeque};
+
+        let mut visited: HashSet<String> = HashSet::new();
+        let mut queue: VecDeque<(String, usize)> = VecDeque::new();
+        let mut result: Vec<BfsNode> = Vec::new();
+
+        let start = symbol.to_lowercase();
+        visited.insert(start.clone());
+        queue.push_back((start, 0));
+
+        while let Some((current, depth)) = queue.pop_front() {
+            if depth >= max_depth {
+                continue;
+            }
+
+            let neighbors: Vec<&CallEdge> = match dir {
+                BfsDirection::Callers => self
+                    .edges
+                    .iter()
+                    .filter(|e| e.callee_name.to_lowercase() == current)
+                    .collect(),
+                BfsDirection::Callees => self
+                    .edges
+                    .iter()
+                    .filter(|e| e.caller_symbol.to_lowercase() == current)
+                    .collect(),
+            };
+
+            for edge in neighbors {
+                let next_sym = match dir {
+                    BfsDirection::Callers => &edge.caller_symbol,
+                    BfsDirection::Callees => &edge.callee_name,
+                };
+                let next_lower = next_sym.to_lowercase();
+
+                if !visited.insert(next_lower.clone()) {
+                    continue;
+                }
+
+                result.push(BfsNode {
+                    symbol: next_sym.clone(),
+                    file: edge.caller_file.clone(),
+                    line: edge.caller_line,
+                    depth: depth + 1,
+                    from_symbol: if depth == 0 {
+                        symbol.to_string()
+                    } else {
+                        current.clone()
+                    },
+                });
+
+                queue.push_back((next_lower, depth + 1));
+            }
+        }
+
+        result
+    }
+
+    /// Find shortest call path from `from` to `to` using BFS.
+    /// Returns None if no path exists (searched up to depth 10).
+    /// Find shortest call path from `from` to `to` using BFS.
+    /// Returns None if no path exists (searched up to depth 10).
+    pub fn find_call_path(&self, from: &str, to: &str) -> Option<Vec<PathHop>> {
+        use std::collections::{HashMap as BfsMap, VecDeque};
+
+        let from_lower = from.to_lowercase();
+        let to_lower = to.to_lowercase();
+
+        if from_lower == to_lower {
+            return Some(vec![PathHop {
+                symbol: from.to_string(),
+                file: String::new(),
+                line: 0,
+            }]);
+        }
+
+        const MAX_TRACE_DEPTH: usize = 10;
+
+        // (parent_symbol, file, line, depth)
+        let mut visited: BfsMap<String, (String, String, usize, usize)> = BfsMap::new();
+        let mut queue: VecDeque<String> = VecDeque::new();
+
+        visited.insert(from_lower.clone(), (String::new(), String::new(), 0, 0));
+        queue.push_back(from_lower.clone());
+
+        while let Some(current) = queue.pop_front() {
+            let current_depth = visited.get(&current).map_or(0, |e| e.3);
+            if current_depth >= MAX_TRACE_DEPTH {
+                continue;
+            }
+
+            let callees: Vec<&CallEdge> = self
+                .edges
+                .iter()
+                .filter(|e| e.caller_symbol.to_lowercase() == current)
+                .collect();
+
+            for edge in callees {
+                let next = edge.callee_name.to_lowercase();
+                if visited.contains_key(&next) {
+                    continue;
+                }
+
+                visited.insert(
+                    next.clone(),
+                    (
+                        current.clone(),
+                        edge.caller_file.clone(),
+                        edge.caller_line,
+                        current_depth + 1,
+                    ),
+                );
+
+                if next == to_lower {
+                    return Some(Self::reconstruct_path(
+                        &visited,
+                        &from_lower,
+                        &to_lower,
+                        from,
+                        to,
+                    ));
+                }
+
+                queue.push_back(next);
+            }
+        }
+
+        None
+    }
+
+    fn reconstruct_path(
+        visited: &std::collections::HashMap<String, (String, String, usize, usize)>,
+        from_lower: &str,
+        to_lower: &str,
+        from_orig: &str,
+        to_orig: &str,
+    ) -> Vec<PathHop> {
+        let mut path = Vec::new();
+        let mut current = to_lower.to_string();
+
+        while current != from_lower {
+            let (parent, file, line, _depth) = &visited[&current];
+            let sym_name = if current == to_lower {
+                to_orig.to_string()
+            } else {
+                current.clone()
+            };
+            path.push(PathHop {
+                symbol: sym_name,
+                file: file.clone(),
+                line: *line,
+            });
+            current = parent.clone();
+        }
+
+        path.push(PathHop {
+            symbol: from_orig.to_string(),
+            file: String::new(),
+            line: 0,
+        });
+
+        path.reverse();
+        path
+    }
+
+    /// Count unique transitive callers up to `max_depth`.
+    pub fn transitive_caller_count(&self, symbol: &str, max_depth: usize) -> usize {
+        let nodes = self.bfs_callers(symbol, max_depth);
+        let mut unique: std::collections::HashSet<String> = std::collections::HashSet::new();
+        for node in &nodes {
+            unique.insert(node.symbol.to_lowercase());
+        }
+        unique.len()
+    }
+
+    pub fn save(&self) -> Result<(), String> {
+        let dir = call_graph_dir(&self.project_root)
+            .ok_or_else(|| "Cannot determine home directory".to_string())?;
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        let json = serde_json::to_string(self).map_err(|e| e.to_string())?;
+        let compressed = zstd::encode_all(json.as_bytes(), 9).map_err(|e| format!("zstd: {e}"))?;
+        let target = dir.join("call_graph.json.zst");
+        let tmp = target.with_extension("zst.tmp");
+        std::fs::write(&tmp, &compressed).map_err(|e| e.to_string())?;
+        std::fs::rename(&tmp, &target).map_err(|e| e.to_string())?;
+        let _ = std::fs::remove_file(dir.join("call_graph.json"));
+        Ok(())
+    }
+
+    pub fn load(project_root: &str) -> Option<Self> {
+        let dir = call_graph_dir(project_root)?;
+
+        let zst_path = dir.join("call_graph.json.zst");
+        if zst_path.exists() {
+            let compressed = std::fs::read(&zst_path).ok()?;
+            let data = zstd::decode_all(compressed.as_slice()).ok()?;
+            let content = String::from_utf8(data).ok()?;
+            return serde_json::from_str(&content).ok();
+        }
+
+        let json_path = dir.join("call_graph.json");
+        if json_path.exists() {
+            let content = std::fs::read_to_string(&json_path).ok()?;
+            let parsed: Self = serde_json::from_str(&content).ok()?;
+            // Auto-migrate: compress legacy JSON to zstd
+            if let Ok(compressed) = zstd::encode_all(content.as_bytes(), 9) {
+                let zst_tmp = zst_path.with_extension("zst.tmp");
+                if std::fs::write(&zst_tmp, &compressed).is_ok()
+                    && std::fs::rename(&zst_tmp, &zst_path).is_ok()
+                {
+                    let _ = std::fs::remove_file(&json_path);
+                }
+            }
+            return Some(parsed);
+        }
+
+        None
+    }
+
+    pub fn load_or_build(project_root: &str, index: &ProjectIndex) -> Self {
+        if let Some(previous) = Self::load(project_root) {
+            Self::build_incremental(index, &previous)
+        } else {
+            Self::build(index)
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Cache staleness check (fast — mtime-based, no content reads)
+// ---------------------------------------------------------------------------
+
+fn cache_looks_stale(cached: &CallGraph, index: &ProjectIndex) -> bool {
+    if cached.file_hashes.len() != index.files.len() {
+        return true;
+    }
+    let cached_files: std::collections::HashSet<&str> =
+        cached.file_hashes.keys().map(String::as_str).collect();
+    let index_files: std::collections::HashSet<&str> =
+        index.files.keys().map(String::as_str).collect();
+    cached_files != index_files
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+fn call_graph_dir(project_root: &str) -> Option<std::path::PathBuf> {
+    ProjectIndex::index_dir(project_root)
+}
+
+fn group_edges_by_file(edges: &[CallEdge]) -> HashMap<&str, Vec<CallEdge>> {
+    let mut map: HashMap<&str, Vec<CallEdge>> = HashMap::new();
+    for edge in edges {
+        map.entry(edge.caller_file.as_str())
+            .or_default()
+            .push(edge.clone());
+    }
+    map
+}
+
+/// Owned version for safe `Send` across rayon threads.
+fn group_symbols_by_file_owned(index: &ProjectIndex) -> HashMap<String, Vec<SymbolEntry>> {
+    let mut map: HashMap<String, Vec<SymbolEntry>> = HashMap::new();
+    for sym in index.symbols.values() {
+        map.entry(sym.file.clone()).or_default().push(sym.clone());
+    }
+    for syms in map.values_mut() {
+        syms.sort_by_key(|s| s.start_line);
+    }
+    map
+}
+
+fn find_enclosing_symbol_owned(file_symbols: Option<&Vec<SymbolEntry>>, line: usize) -> String {
+    let Some(syms) = file_symbols else {
+        return "<module>".to_string();
+    };
+    let mut best: Option<&SymbolEntry> = None;
+    for sym in syms {
+        if line >= sym.start_line && line <= sym.end_line {
+            match best {
+                None => best = Some(sym),
+                Some(prev) => {
+                    if (sym.end_line - sym.start_line) < (prev.end_line - prev.start_line) {
+                        best = Some(sym);
+                    }
+                }
+            }
+        }
+    }
+    best.map_or_else(|| "<module>".to_string(), |s| s.name.clone())
+}
+
+fn resolve_path(relative: &str, project_root: &str) -> String {
+    let p = Path::new(relative);
+    if p.is_absolute() && p.exists() {
+        return relative.to_string();
+    }
+    let relative = relative.trim_start_matches(['/', '\\']);
+    let joined = Path::new(project_root).join(relative);
+    joined.to_string_lossy().to_string()
+}
+
+fn simple_hash(content: &str) -> String {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    content.hash(&mut hasher);
+    format!("{:x}", hasher.finish())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn callers_of_empty_graph() {
+        let graph = CallGraph::new("/tmp");
+        assert!(graph.callers_of("foo").is_empty());
+    }
+
+    #[test]
+    fn callers_of_finds_edges() {
+        let mut graph = CallGraph::new("/tmp");
+        graph.edges.push(CallEdge {
+            caller_file: "a.rs".to_string(),
+            caller_symbol: "bar".to_string(),
+            caller_line: 10,
+            callee_name: "foo".to_string(),
+        });
+        graph.edges.push(CallEdge {
+            caller_file: "b.rs".to_string(),
+            caller_symbol: "baz".to_string(),
+            caller_line: 20,
+            callee_name: "foo".to_string(),
+        });
+        graph.edges.push(CallEdge {
+            caller_file: "c.rs".to_string(),
+            caller_symbol: "qux".to_string(),
+            caller_line: 30,
+            callee_name: "other".to_string(),
+        });
+        let callers = graph.callers_of("foo");
+        assert_eq!(callers.len(), 2);
+    }
+
+    #[test]
+    fn callees_of_finds_edges() {
+        let mut graph = CallGraph::new("/tmp");
+        graph.edges.push(CallEdge {
+            caller_file: "a.rs".to_string(),
+            caller_symbol: "main".to_string(),
+            caller_line: 5,
+            callee_name: "init".to_string(),
+        });
+        graph.edges.push(CallEdge {
+            caller_file: "a.rs".to_string(),
+            caller_symbol: "main".to_string(),
+            caller_line: 6,
+            callee_name: "run".to_string(),
+        });
+        graph.edges.push(CallEdge {
+            caller_file: "a.rs".to_string(),
+            caller_symbol: "other".to_string(),
+            caller_line: 15,
+            callee_name: "init".to_string(),
+        });
+        let callees = graph.callees_of("main");
+        assert_eq!(callees.len(), 2);
+    }
+
+    #[test]
+    fn find_enclosing_picks_narrowest() {
+        let outer = SymbolEntry {
+            file: "a.rs".to_string(),
+            name: "Outer".to_string(),
+            kind: "struct".to_string(),
+            start_line: 1,
+            end_line: 50,
+            is_exported: true,
+        };
+        let inner = SymbolEntry {
+            file: "a.rs".to_string(),
+            name: "inner_fn".to_string(),
+            kind: "fn".to_string(),
+            start_line: 10,
+            end_line: 20,
+            is_exported: false,
+        };
+        let syms = vec![outer, inner];
+        let result = find_enclosing_symbol_owned(Some(&syms), 15);
+        assert_eq!(result, "inner_fn");
+    }
+
+    #[test]
+    fn find_enclosing_returns_module_when_no_match() {
+        let sym = SymbolEntry {
+            file: "a.rs".to_string(),
+            name: "foo".to_string(),
+            kind: "fn".to_string(),
+            start_line: 10,
+            end_line: 20,
+            is_exported: false,
+        };
+        let syms = vec![sym];
+        let result = find_enclosing_symbol_owned(Some(&syms), 5);
+        assert_eq!(result, "<module>");
+    }
+
+    #[test]
+    fn resolve_path_trims_rooted_relative_prefix() {
+        let resolved = resolve_path(r"\src\main\kotlin\Example.kt", r"C:\repo");
+        assert_eq!(
+            resolved,
+            Path::new(r"C:\repo")
+                .join(r"src\main\kotlin\Example.kt")
+                .to_string_lossy()
+                .to_string()
+        );
+    }
+
+    fn build_chain_graph() -> CallGraph {
+        // A -> B -> C -> D
+        let mut graph = CallGraph::new("/tmp");
+        graph.edges.push(CallEdge {
+            caller_file: "a.rs".into(),
+            caller_symbol: "fn_a".into(),
+            caller_line: 1,
+            callee_name: "fn_b".into(),
+        });
+        graph.edges.push(CallEdge {
+            caller_file: "b.rs".into(),
+            caller_symbol: "fn_b".into(),
+            caller_line: 10,
+            callee_name: "fn_c".into(),
+        });
+        graph.edges.push(CallEdge {
+            caller_file: "c.rs".into(),
+            caller_symbol: "fn_c".into(),
+            caller_line: 20,
+            callee_name: "fn_d".into(),
+        });
+        graph
+    }
+
+    #[test]
+    fn bfs_callees_depth_1_returns_direct() {
+        let graph = build_chain_graph();
+        let nodes = graph.bfs_callees("fn_a", 1);
+        assert_eq!(nodes.len(), 1);
+        assert_eq!(nodes[0].symbol, "fn_b");
+        assert_eq!(nodes[0].depth, 1);
+    }
+
+    #[test]
+    fn bfs_callees_depth_3_returns_chain() {
+        let graph = build_chain_graph();
+        let nodes = graph.bfs_callees("fn_a", 3);
+        assert_eq!(nodes.len(), 3);
+        let syms: Vec<&str> = nodes.iter().map(|n| n.symbol.as_str()).collect();
+        assert!(syms.contains(&"fn_b"));
+        assert!(syms.contains(&"fn_c"));
+        assert!(syms.contains(&"fn_d"));
+    }
+
+    #[test]
+    fn bfs_callers_depth_2_returns_transitive() {
+        let graph = build_chain_graph();
+        let nodes = graph.bfs_callers("fn_c", 2);
+        assert_eq!(nodes.len(), 2);
+        let syms: Vec<&str> = nodes.iter().map(|n| n.symbol.as_str()).collect();
+        assert!(syms.contains(&"fn_b"));
+        assert!(syms.contains(&"fn_a"));
+    }
+
+    #[test]
+    fn find_call_path_direct() {
+        let graph = build_chain_graph();
+        let path = graph.find_call_path("fn_a", "fn_b");
+        assert!(path.is_some());
+        let hops = path.unwrap();
+        assert_eq!(hops.len(), 2);
+        assert_eq!(hops[0].symbol, "fn_a");
+        assert_eq!(hops[1].symbol, "fn_b");
+    }
+
+    #[test]
+    fn find_call_path_multi_hop() {
+        let graph = build_chain_graph();
+        let path = graph.find_call_path("fn_a", "fn_d");
+        assert!(path.is_some());
+        let hops = path.unwrap();
+        assert_eq!(hops.len(), 4);
+        assert_eq!(hops[0].symbol, "fn_a");
+        assert_eq!(hops[3].symbol, "fn_d");
+    }
+
+    #[test]
+    fn find_call_path_no_connection() {
+        let graph = build_chain_graph();
+        let path = graph.find_call_path("fn_d", "fn_a");
+        assert!(path.is_none());
+    }
+
+    #[test]
+    fn find_call_path_same_symbol() {
+        let graph = build_chain_graph();
+        let path = graph.find_call_path("fn_a", "fn_a");
+        assert!(path.is_some());
+        assert_eq!(path.unwrap().len(), 1);
+    }
+
+    #[test]
+    fn transitive_caller_count_returns_unique() {
+        let mut graph = CallGraph::new("/tmp");
+        // x -> target, y -> target, z -> x (so z is transitive caller of target)
+        graph.edges.push(CallEdge {
+            caller_file: "x.rs".into(),
+            caller_symbol: "x".into(),
+            caller_line: 1,
+            callee_name: "target".into(),
+        });
+        graph.edges.push(CallEdge {
+            caller_file: "y.rs".into(),
+            caller_symbol: "y".into(),
+            caller_line: 2,
+            callee_name: "target".into(),
+        });
+        graph.edges.push(CallEdge {
+            caller_file: "z.rs".into(),
+            caller_symbol: "z".into(),
+            caller_line: 3,
+            callee_name: "x".into(),
+        });
+        assert_eq!(graph.transitive_caller_count("target", 5), 3);
+    }
+
+    #[test]
+    fn risk_level_classification() {
+        assert_eq!(RiskLevel::from_caller_count(0), RiskLevel::Low);
+        assert_eq!(RiskLevel::from_caller_count(1), RiskLevel::Low);
+        assert_eq!(RiskLevel::from_caller_count(3), RiskLevel::Medium);
+        assert_eq!(RiskLevel::from_caller_count(7), RiskLevel::High);
+        assert_eq!(RiskLevel::from_caller_count(15), RiskLevel::Critical);
+    }
+
+    #[test]
+    fn bfs_handles_cycle_without_infinite_loop() {
+        let mut graph = CallGraph::new("/tmp");
+        graph.edges.push(CallEdge {
+            caller_file: "a.rs".into(),
+            caller_symbol: "a".into(),
+            caller_line: 1,
+            callee_name: "b".into(),
+        });
+        graph.edges.push(CallEdge {
+            caller_file: "b.rs".into(),
+            caller_symbol: "b".into(),
+            caller_line: 2,
+            callee_name: "a".into(),
+        });
+        let nodes = graph.bfs_callees("a", 5);
+        // Should visit b once (depth 1), then a is already visited
+        assert_eq!(nodes.len(), 1);
+        assert_eq!(nodes[0].symbol, "b");
+    }
+}

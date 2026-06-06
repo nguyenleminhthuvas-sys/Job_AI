@@ -1,0 +1,319 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-22.04
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-22.04
+            cross: true
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-22.04
+            musl: true
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-22.04
+            musl: true
+            cross: true
+            zig: true
+          - target: x86_64-apple-darwin
+            os: macos-latest
+          - target: aarch64-apple-darwin
+            os: macos-latest
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+          - target: x86_64-pc-windows-gnu
+            os: windows-latest
+            jemalloc: true
+
+    steps:
+      - uses: actions/checkout@v4 # v4
+        with:
+          persist-credentials: false
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install musl tools
+        if: matrix.musl == true && matrix.zig != true
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+          if [[ "${{ matrix.target }}" == aarch64-* ]]; then
+            TOOLCHAIN_ROOT="${RUNNER_TEMP}/aarch64-linux-musl-cross"
+            curl -sL "https://musl.cc/aarch64-linux-musl-cross.tgz" | tar xz -C "${RUNNER_TEMP}"
+            echo "${TOOLCHAIN_ROOT}/bin" >> $GITHUB_PATH
+            echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=aarch64-linux-musl-gcc" >> $GITHUB_ENV
+            echo "CC_aarch64_unknown_linux_musl=aarch64-linux-musl-gcc" >> $GITHUB_ENV
+            echo "AR_aarch64_unknown_linux_musl=aarch64-linux-musl-ar" >> $GITHUB_ENV
+            echo "RANLIB_aarch64_unknown_linux_musl=aarch64-linux-musl-ranlib" >> $GITHUB_ENV
+          fi
+
+      - name: Install cross-compilation tools
+        if: matrix.cross == true && matrix.musl != true
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+
+      # ---- Windows jemalloc target: MSYS2 + pre-built jemalloc ------------
+      # See .github/actions/windows-jemalloc for the pitfall details.
+      - name: Setup MSYS2 and MinGW
+        if: matrix.jemalloc == true
+        uses: msys2/setup-msys2@e9898307ac31d1a803454791be09ab9973336e1c # v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: base-devel mingw-w64-x86_64-toolchain
+          path-type: inherit
+
+      - name: Build jemalloc (Windows GNU target)
+        if: matrix.jemalloc == true
+        id: jemalloc
+        uses: ./.github/actions/windows-jemalloc
+
+      - name: Run tests
+        if: matrix.cross != true
+        working-directory: rust
+        shell: bash
+        run: |
+          if [[ "${{ matrix.jemalloc }}" == "true" ]]; then
+            JEMALLOC_OVERRIDE="${{ steps.jemalloc.outputs.jemalloc-override }}" \
+              CARGO_TARGET_X86_64_PC_WINDOWS_GNU_RUSTFLAGS="-L ${{ steps.jemalloc.outputs.dummy-dir }}" \
+              cargo test --lib --target x86_64-pc-windows-gnu --all-features -- --test-threads=1
+          else
+            cargo test --lib --all-features -- --test-threads=1
+          fi
+
+      - name: Setup Zig
+        if: matrix.zig == true
+        run: |
+          pip3 install -q ziglang==0.13.0
+          ZIG_BIN="$(python3 -c 'import ziglang, os; print(os.path.dirname(ziglang.__file__))')"
+          echo "${ZIG_BIN}" >> $GITHUB_PATH
+          "${ZIG_BIN}/zig" version
+
+      - name: Install cargo-zigbuild
+        if: matrix.zig == true
+        uses: taiki-e/install-action@74e87cbfa15a59692b158178d8905a61bf6fca95 # v2
+        with:
+          tool: cargo-zigbuild
+
+      - name: Build
+        working-directory: rust
+        shell: bash
+        run: |
+          if [[ "${{ matrix.zig }}" == "true" ]]; then
+            cargo zigbuild --release --target ${{ matrix.target }}
+          elif [[ "${{ matrix.jemalloc }}" == "true" ]]; then
+            JEMALLOC_OVERRIDE="${{ steps.jemalloc.outputs.jemalloc-override }}" \
+              CARGO_TARGET_X86_64_PC_WINDOWS_GNU_RUSTFLAGS="-L ${{ steps.jemalloc.outputs.dummy-dir }}" \
+              cargo build --release --target ${{ matrix.target }}
+          else
+            cargo build --release --target ${{ matrix.target }}
+          fi
+
+      - name: Package (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          cd rust/target/${{ matrix.target }}/release
+          tar czf ../../../../lean-ctx-${{ matrix.target }}.tar.gz lean-ctx
+          cd ../../../..
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "rust/target/${{ matrix.target }}/release/lean-ctx.exe" -DestinationPath "lean-ctx-${{ matrix.target }}.zip"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: lean-ctx-${{ matrix.target }}
+          path: |
+            lean-ctx-${{ matrix.target }}.tar.gz
+            lean-ctx-${{ matrix.target }}.zip
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4 # v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          merge-multiple: true
+
+      - name: Create stable source tarball
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          git archive --format=tar.gz --prefix="lean-ctx-${VERSION}/" "${GITHUB_REF_NAME}" -o "lean-ctx-${VERSION}-source.tar.gz"
+
+      - name: Generate checksums
+        run: sha256sum lean-ctx-*.tar.gz lean-ctx-*.zip > SHA256SUMS
+
+      - name: Extract release notes from CHANGELOG
+        id: notes
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          PREV_TAG=$(git tag --sort=-v:refname | grep -A1 "^v${VERSION}$" | tail -1)
+          NOTES=$(awk "/^## \\[${VERSION}\\]/{found=1; next} /^## \\[/{if(found) exit} found{print}" CHANGELOG.md)
+
+          {
+            echo "body<<BODY_EOF"
+            echo "$NOTES"
+            echo ""
+            echo "#### Upgrade"
+            echo '```bash'
+            echo "lean-ctx update                 # recommended (auto-downloads + refreshes shell hooks)"
+            echo "cargo install lean-ctx          # or"
+            echo "npm update -g lean-ctx-bin      # or"
+            echo "brew upgrade lean-ctx"
+            echo '```'
+            echo ""
+            echo "> **Note:** After upgrading via cargo/npm/brew, run \`lean-ctx setup\` to refresh shell aliases. \`lean-ctx update\` does this automatically."
+            echo ""
+            echo "**Full Changelog**: https://github.com/yvgude/lean-ctx/compare/${PREV_TAG}...v${VERSION}"
+            echo "BODY_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          body: ${{ steps.notes.outputs.body }}
+          files: |
+            lean-ctx-*.tar.gz
+            lean-ctx-*.zip
+            SHA256SUMS
+
+  publish-crates:
+    name: Publish to crates.io
+    needs: release
+    runs-on: ubuntu-latest
+    if: ${{ !contains(github.ref_name, '-rc') }}
+    steps:
+      - uses: actions/checkout@v4 # v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+      - name: Publish
+        working-directory: rust
+        run: cargo publish --allow-dirty --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        continue-on-error: true
+
+  publish-npm:
+    name: Publish to npm
+    needs: release
+    runs-on: ubuntu-latest
+    if: ${{ !contains(github.ref_name, '-rc') }}
+    steps:
+      - uses: actions/checkout@v4 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Publish lean-ctx-bin
+        working-directory: packages/lean-ctx-bin
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        continue-on-error: true
+
+      - name: Publish pi-lean-ctx
+        working-directory: packages/pi-lean-ctx
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        continue-on-error: true
+
+  update-homebrew:
+    name: Update Homebrew
+    needs: release
+    runs-on: ubuntu-latest
+    if: ${{ !contains(github.ref_name, '-rc') }}
+    steps:
+      - name: Download checksums and extract hashes
+        id: checksums
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+          gh release download "${GITHUB_REF_NAME}" \
+            --repo yvgude/lean-ctx --pattern "SHA256SUMS" --dir .
+
+          SOURCE_SHA=$(grep "source\.tar\.gz" SHA256SUMS | awk '{print $1}')
+          echo "source_sha=${SOURCE_SHA}" >> "$GITHUB_OUTPUT"
+          echo "Source tarball SHA256: ${SOURCE_SHA}"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Clone and update formula
+        run: |
+          VERSION="${{ steps.checksums.outputs.version }}"
+          SHA="${{ steps.checksums.outputs.source_sha }}"
+
+          git clone "https://x-access-token:${HOMEBREW_TOKEN}@github.com/yvgude/homebrew-lean-ctx.git"
+          cd homebrew-lean-ctx
+
+          sed -i "s|url \".*\"|url \"https://github.com/yvgude/lean-ctx/releases/download/v${VERSION}/lean-ctx-${VERSION}-source.tar.gz\"|" Formula/lean-ctx.rb
+          sed -i "s|sha256 \".*\"|sha256 \"${SHA}\"|" Formula/lean-ctx.rb
+          sed -i "s|assert_match \"lean-ctx [0-9][^\"]*\"|assert_match \"lean-ctx ${VERSION}\"|" Formula/lean-ctx.rb
+
+          grep -q "v${VERSION}/lean-ctx-${VERSION}-source.tar.gz" Formula/lean-ctx.rb
+          grep -q "sha256 \"${SHA}\"" Formula/lean-ctx.rb
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/lean-ctx.rb
+          git diff --cached --quiet || git commit -m "lean-ctx ${VERSION}"
+          git push
+        env:
+          HOMEBREW_TOKEN: ${{ secrets.HOMEBREW_GITHUB_TOKEN }}
+
+  announce-twitter:
+    name: Announce on Twitter
+    needs: release
+    runs-on: ubuntu-latest
+    if: ${{ !contains(github.ref_name, '-rc') }}
+    steps:
+      - uses: actions/checkout@v4 # v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+
+      - name: Post release tweet
+        env:
+          TWITTER_CONSUMER_KEY: ${{ secrets.TWITTER_CONSUMER_KEY }}
+          TWITTER_CONSUMER_SECRET: ${{ secrets.TWITTER_CONSUMER_SECRET }}
+          TWITTER_ACCESS_TOKEN: ${{ secrets.TWITTER_ACCESS_TOKEN }}
+          TWITTER_ACCESS_SECRET: ${{ secrets.TWITTER_ACCESS_SECRET }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: node .github/scripts/post-release-tweet.mjs

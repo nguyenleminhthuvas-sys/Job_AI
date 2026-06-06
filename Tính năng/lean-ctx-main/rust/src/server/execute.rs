@@ -1,0 +1,271 @@
+use std::io::Read;
+use std::process::Stdio;
+use std::sync::mpsc;
+use std::time::{Duration, Instant};
+
+const DEFAULT_COMMAND_TIMEOUT: Duration = Duration::from_mins(2);
+const READER_RESULT_TIMEOUT: Duration = Duration::from_secs(2);
+
+#[cfg(test)]
+pub(crate) fn execute_command_in(command: &str, cwd: &str) -> (String, i32) {
+    execute_command_with_env(command, cwd, &std::collections::HashMap::new())
+}
+
+pub(crate) fn execute_command_with_env(
+    command: &str,
+    cwd: &str,
+    extra_env: &std::collections::HashMap<String, String>,
+) -> (String, i32) {
+    let (shell, flag) = crate::shell::shell_and_flag();
+    let normalized_cmd = crate::tools::ctx_shell::normalize_command_for_shell(command);
+    let dir = std::path::Path::new(cwd);
+    let mut cmd = std::process::Command::new(&shell);
+    if cfg!(windows) && crate::shell::platform::is_powershell(&shell) {
+        cmd.args(["-NoProfile", "-ExecutionPolicy", "Bypass"]);
+    }
+    cmd.arg(&flag)
+        .arg(&normalized_cmd)
+        .env("LEAN_CTX_ACTIVE", "1")
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .stdin(Stdio::null());
+
+    if !extra_env.contains_key("GIT_PAGER") {
+        cmd.env("GIT_PAGER", "cat");
+    }
+    if !extra_env.contains_key("PAGER") {
+        cmd.env("PAGER", "cat");
+    }
+
+    ensure_utf8_locale(&mut cmd, extra_env);
+
+    // Auto-forward agent runtime env vars from parent process
+    for (key, val) in std::env::vars() {
+        if key.starts_with("CODEX_")
+            || key.starts_with("CLAUDE_")
+            || key.starts_with("OPENCODE_")
+            || key.starts_with("HERMES_")
+        {
+            cmd.env(&key, &val);
+        }
+    }
+
+    // Explicit env vars from tool call (highest priority)
+    for (key, val) in extra_env {
+        cmd.env(key, val);
+    }
+    if dir.is_dir() {
+        cmd.current_dir(dir);
+    } else {
+        return (
+            format!("ERROR: working directory does not exist or is not a directory: {cwd}"),
+            1,
+        );
+    }
+    let cap = crate::core::limits::max_shell_bytes();
+
+    fn read_bounded<R: Read>(mut r: R, cap: usize) -> (Vec<u8>, bool, usize) {
+        let mut kept: Vec<u8> = Vec::with_capacity(cap.min(8192));
+        let mut buf = [0u8; 8192];
+        let mut total = 0usize;
+        let mut truncated = false;
+        loop {
+            match r.read(&mut buf) {
+                Ok(0) | Err(_) => break,
+                Ok(n) => {
+                    total = total.saturating_add(n);
+                    if kept.len() < cap {
+                        let remaining = cap - kept.len();
+                        let take = remaining.min(n);
+                        kept.extend_from_slice(&buf[..take]);
+                        if take < n {
+                            truncated = true;
+                        }
+                    } else {
+                        truncated = true;
+                    }
+                }
+            }
+        }
+        (kept, truncated, total)
+    }
+
+    let mut child = match cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).spawn() {
+        Ok(c) => c,
+        Err(e) => return (format!("ERROR: {e}"), 1),
+    };
+    let stdout = child.stdout.take();
+    let stderr = child.stderr.take();
+
+    let (out_tx, out_rx) = mpsc::channel();
+    std::thread::spawn(move || {
+        let result = stdout.map_or_else(|| (Vec::new(), false, 0), |s| read_bounded(s, cap));
+        let _ = out_tx.send(result);
+    });
+
+    let (err_tx, err_rx) = mpsc::channel();
+    std::thread::spawn(move || {
+        let result = stderr.map_or_else(|| (Vec::new(), false, 0), |s| read_bounded(s, cap));
+        let _ = err_tx.send(result);
+    });
+
+    let timeout = command_timeout();
+    let start = Instant::now();
+    let (code, timed_out) = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break (status.code().unwrap_or(1), false),
+            Ok(None) => {
+                if start.elapsed() >= timeout {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    break (124, true);
+                }
+                std::thread::sleep(Duration::from_millis(25));
+            }
+            Err(_) => break (1, false),
+        }
+    };
+
+    let (out_bytes, out_trunc, _out_total) = out_rx
+        .recv_timeout(READER_RESULT_TIMEOUT)
+        .unwrap_or_default();
+    let (err_bytes, err_trunc, _err_total) = err_rx
+        .recv_timeout(READER_RESULT_TIMEOUT)
+        .unwrap_or_default();
+
+    let stdout = crate::shell::decode_output(&out_bytes);
+    let stderr = crate::shell::decode_output(&err_bytes);
+    let mut text = if stdout.is_empty() {
+        stderr.clone()
+    } else if stderr.is_empty() {
+        stdout.clone()
+    } else {
+        format!("{stdout}\n{stderr}")
+    };
+
+    if out_trunc || err_trunc {
+        text.push_str(&format!(
+            "\n[truncated: cap={}B stdout={}B stderr={}B]",
+            cap,
+            out_bytes.len(),
+            err_bytes.len()
+        ));
+    }
+    if timed_out {
+        if !text.ends_with('\n') && !text.is_empty() {
+            text.push('\n');
+        }
+        text.push_str(&format!(
+            "ERROR: command timed out after {}ms",
+            timeout.as_millis()
+        ));
+    }
+
+    (text, code)
+}
+
+fn ensure_utf8_locale(
+    cmd: &mut std::process::Command,
+    extra_env: &std::collections::HashMap<String, String>,
+) {
+    if extra_env.contains_key("LC_ALL") || extra_env.contains_key("LC_CTYPE") {
+        return;
+    }
+    crate::shell::platform::apply_utf8_locale(cmd);
+}
+
+fn command_timeout() -> Duration {
+    std::env::var("LEAN_CTX_SHELL_TIMEOUT_MS")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .filter(|millis| *millis > 0)
+        .map_or(DEFAULT_COMMAND_TIMEOUT, Duration::from_millis)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ensure_utf8_locale, execute_command_in};
+
+    #[test]
+    fn ensure_utf8_locale_sets_fallback_when_none_inherited() {
+        let empty: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+        let mut cmd = std::process::Command::new("true");
+
+        // Temporarily unset locale vars to test fallback
+        let saved = (
+            std::env::var("LC_ALL").ok(),
+            std::env::var("LC_CTYPE").ok(),
+            std::env::var("LANG").ok(),
+        );
+        std::env::remove_var("LC_ALL");
+        std::env::remove_var("LC_CTYPE");
+        std::env::remove_var("LANG");
+
+        ensure_utf8_locale(&mut cmd, &empty);
+
+        // Restore
+        if let Some(v) = saved.0 {
+            std::env::set_var("LC_ALL", v);
+        }
+        if let Some(v) = saved.1 {
+            std::env::set_var("LC_CTYPE", v);
+        }
+        if let Some(v) = saved.2 {
+            std::env::set_var("LANG", v);
+        }
+
+        // Command internal env isn't inspectable, but we verify the fn doesn't panic
+        // and the real integration test below checks byte-level correctness.
+    }
+
+    #[test]
+    fn ensure_utf8_locale_skips_when_extra_env_has_lc_all() {
+        let mut extra = std::collections::HashMap::new();
+        extra.insert("LC_ALL".to_string(), "C".to_string());
+        let mut cmd = std::process::Command::new("true");
+        ensure_utf8_locale(&mut cmd, &extra);
+        // Should not panic or override
+    }
+
+    #[test]
+    #[cfg_attr(windows, ignore)]
+    fn utf8_bytes_survive_shell_roundtrip() {
+        let (output, code) = execute_command_in(
+            "printf '\\xD0\\x9F\\xD1\\x80\\xD0\\xB8\\xD0\\xB2\\xD0\\xB5\\xD1\\x82'",
+            ".",
+        );
+        assert_eq!(code, 0, "printf failed: {output}");
+        assert_eq!(output, "Привет", "Cyrillic bytes must survive roundtrip");
+    }
+
+    #[test]
+    #[cfg_attr(windows, ignore)] // ReadToEnd() blocks indefinitely on Windows CI
+    fn execute_command_closes_stdin() {
+        let command = "sh -c 'if read -t 1 line; then echo 67890; else echo 12345; fi'";
+        let (output, code) = execute_command_in(command, ".");
+        assert_eq!(code, 0, "command failed: {output}");
+        assert!(
+            output.contains("12345"),
+            "child process should receive EOF on stdin, got: {output}"
+        );
+    }
+
+    #[test]
+    fn git_version_returns_when_git_is_available() {
+        let git_available = std::process::Command::new("git")
+            .arg("--version")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .is_ok();
+        if !git_available {
+            return;
+        }
+
+        let (output, code) = execute_command_in("git --version", ".");
+        assert_eq!(code, 0, "git command failed: {output}");
+        assert!(
+            output.to_ascii_lowercase().contains("git version"),
+            "unexpected git output: {output}"
+        );
+    }
+}

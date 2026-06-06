@@ -1,0 +1,101 @@
+use rmcp::model::Tool;
+use rmcp::ErrorData;
+use serde_json::{json, Map, Value};
+
+use crate::server::tool_trait::{get_int, get_str, McpTool, ToolContext, ToolOutput};
+use crate::tool_defs::tool_def;
+
+pub struct CtxCallgraphTool;
+
+impl McpTool for CtxCallgraphTool {
+    fn name(&self) -> &'static str {
+        "ctx_callgraph"
+    }
+
+    fn tool_def(&self) -> Tool {
+        tool_def(
+            "ctx_callgraph",
+            "Call graph query: callers/callees (multi-hop BFS), trace path between symbols, risk classification by caller count.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "description": "callers|callees|trace|risk (default: callers)",
+                        "enum": ["callers", "callees", "trace", "risk"]
+                    },
+                    "symbol": {
+                        "type": "string",
+                        "description": "Symbol name (required for callers/callees/risk)"
+                    },
+                    "direction": {
+                        "type": "string",
+                        "description": "Deprecated — use action instead. callers|callees"
+                    },
+                    "file": {
+                        "type": "string",
+                        "description": "Optional: scope results to a specific file"
+                    },
+                    "depth": {
+                        "type": "integer",
+                        "description": "BFS depth for callers/callees (1–5, default 1)",
+                        "minimum": 1,
+                        "maximum": 5
+                    },
+                    "from": {
+                        "type": "string",
+                        "description": "Source symbol for trace action"
+                    },
+                    "to": {
+                        "type": "string",
+                        "description": "Target symbol for trace action"
+                    }
+                }
+            }),
+        )
+    }
+
+    fn handle(
+        &self,
+        args: &Map<String, Value>,
+        ctx: &ToolContext,
+    ) -> Result<ToolOutput, ErrorData> {
+        let action = get_str(args, "action")
+            .or_else(|| get_str(args, "direction"))
+            .unwrap_or_else(|| "callers".to_string());
+
+        let action_normalized = match action.to_lowercase().as_str() {
+            "callers" | "caller" => "callers",
+            "callees" | "callee" => "callees",
+            "trace" => "trace",
+            "risk" => "risk",
+            _ => action.as_str(),
+        }
+        .to_string();
+
+        let symbol = get_str(args, "symbol");
+        let file = get_str(args, "file");
+        let depth = get_int(args, "depth").unwrap_or(1).clamp(1, 5) as usize;
+        let from = get_str(args, "from");
+        let to = get_str(args, "to");
+
+        let result = crate::tools::ctx_callgraph::handle(
+            &action_normalized,
+            symbol.as_deref(),
+            file.as_deref(),
+            &ctx.project_root,
+            depth,
+            from.as_deref(),
+            to.as_deref(),
+        );
+
+        Ok(ToolOutput {
+            text: result,
+            original_tokens: 0,
+            saved_tokens: 0,
+            mode: Some(action_normalized),
+            path: None,
+            changed: false,
+        })
+    }
+}
