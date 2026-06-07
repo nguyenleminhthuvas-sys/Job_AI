@@ -1,1010 +1,1178 @@
 <!DOCTYPE html>
 <html lang="vi">
-
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Yến Việt &middot; CEO Dashboard &middot; Layer 1</title>
-  <link
-    href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Playfair+Display:wght@700&display=swap"
-    rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <title>Yến Việt - CEO Dashboard</title>
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+  
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
   <style>
     :root {
-      --navy: #134686;
-      --red: #ED3F27;
-      --amber: #FEB21A;
-      --cream: #FDF4E3;
+      --primary: #134686;
+      --alert: #ED3F27;
+      --warning: #FEB21A;
+      --bg: #FDF4E3;
       --white: #FFFFFF;
-      --pink: #E91E63;
-      --gray: #9E9E9E;
-      --dark-red: #B71C1C;
-      --orange: #FF9800;
-      --green: #4CAF50;
-      --text-main: #333333;
-      --text-muted: #777777;
+      --text-main: #444;
+      --text-sub: #888;
+      --text-title: #666;
+      --font-display: 'Playfair Display', serif;
+      --font-body: 'Be Vietnam Pro', sans-serif;
     }
 
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-
-    html, body { margin: 0; overflow: hidden; }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
 
     body {
-      background-color: var(--cream);
-      font-family: 'Be Vietnam Pro', sans-serif;
-      color: #333333;
-      width: 1440px;
-      height: 900px;
-      padding: 16px 24px;
-      overflow: hidden;
+      font-family: var(--font-body);
+      background-color: var(--bg);
+      color: var(--text-main);
+      overflow-y: auto;
+      min-width: 1440px;
+      padding: 32px 40px;
     }
 
-    /* ===== HEADER ===== */
-    .header {
+    /* HEADER */
+    header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      height: 46px;
-      margin-bottom: 10px;
+      height: 72px;
+      margin-bottom: 24px;
     }
 
-    .logo-area { display: flex; align-items: center; }
-
-    .logo-area h1 {
-      font-family: 'Playfair Display', serif;
-      font-size: 22px;
-      font-weight: 700;
-      color: var(--navy);
-    }
-
-    .logo-area h2 {
-      font-size: 11px;
-      color: var(--text-muted);
-      font-weight: 500;
-      margin-top: 2px;
-    }
-
-    .header-actions { display: flex; align-items: center; gap: 20px; }
-
-    .time-filters {
+    .header-left {
       display: flex;
-      background: var(--white);
-      border-radius: 20px;
-      overflow: hidden;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+      align-items: center;
+      gap: 16px;
     }
 
-    .filter-pill {
-      padding: 7px 16px;
-      font-size: 11px;
-      cursor: pointer;
-      font-weight: 600;
-      color: var(--text-muted);
-      transition: background 0.2s;
+    .logo {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background-color: var(--primary);
+      color: var(--warning);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-family: var(--font-display);
+      font-size: 20px;
     }
 
-    .filter-pill.active { background: var(--navy); color: var(--white); }
-
-    /* ===== DASHBOARD GRID — 3 COLUMNS ===== */
-    .dashboard-grid {
-      display: grid;
-      grid-template-columns: 38fr 36fr 26fr;
-      gap: 12px;
-      height: 828px; /* 900 - 16*2 padding - 46 header - 10 mb = 828 */
-    }
-
-    /* ===== COLUMN SUBGRIDS ===== */
-    .col-1 {
-      display: grid;
-      grid-template-rows: 152px 192px 92px 1fr;
-      gap: 10px;
-      height: 100%;
-    }
-
-    .col-2 {
-      display: grid;
-      grid-template-rows: 96px 112px 132px 120px 1fr;
-      gap: 10px;
-      height: 100%;
-    }
-
-    .col-3 {
-      display: grid;
-      grid-template-rows: 122px 200px 1fr 118px;
-      gap: 10px;
-      height: 100%;
-    }
-
-    /* ===== CARD BASE ===== */
-    .card {
-      height: 100%;
-      box-sizing: border-box;
-      overflow: hidden;
+    .header-title-container {
       display: flex;
       flex-direction: column;
-      padding: 12px 14px;
-      border-radius: 12px;
-      background: #fff;
-      border: 0.5px solid rgba(19,70,134,0.08);
-      box-shadow: 0 2px 16px rgba(19,70,134,0.06);
-      transition: transform 0.15s ease, box-shadow 0.15s ease;
-      position: relative;
+    }
+
+    .header-title {
+      font-family: var(--font-display);
+      font-size: 26px;
+      color: var(--primary);
+    }
+
+    .header-subtitle {
+      font-size: 12px;
+      color: var(--text-sub);
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .filter-pills {
+      display: flex;
+      gap: 8px;
+    }
+
+    .pill {
+      min-width: 80px;
+      text-align: center;
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
       cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+
+    .pill.active {
+      background-color: var(--primary);
+      color: var(--white);
+      border: 1px solid var(--primary);
+    }
+
+    .pill:not(.active) {
+      background-color: var(--white);
+      color: var(--primary);
+      border: 1px solid var(--primary);
+    }
+
+    .timestamp {
+      font-size: 12px;
+      color: var(--text-sub);
+    }
+    .live-dot {
+      color: #4CAF50;
+    }
+
+
+    /* DASHBOARD GRID */
+    .dashboard {
+      display: grid;
+      grid-template-columns: 2fr 2fr 1.2fr;
+      gap: 20px;
+    }
+
+    .col {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      justify-content: space-between;
+    }
+
+    /* CARD SYSTEM */
+    .card {
+      background: var(--white);
+      border-radius: 14px;
+      padding: 20px 22px;
+      border: 1px solid rgba(19,70,134,0.08);
+      box-shadow: 0 2px 20px rgba(19,70,134,0.06);
+      transition: transform 0.2s, box-shadow 0.2s;
+      position: relative;
     }
 
     .card:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 6px 24px rgba(19,70,134,0.10);
+      transform: translateY(-3px);
+      box-shadow: 0 8px 32px rgba(19,70,134,0.12);
+      cursor: pointer;
     }
-
-    .card-drill-hint {
-      display: none;
-      position: absolute;
-      bottom: 7px;
-      right: 10px;
-      font-size: 9px;
-      color: var(--navy);
-      font-weight: 600;
-      opacity: 0.7;
-    }
-
-    .card:hover .card-drill-hint { display: block; }
 
     .card-header {
       display: flex;
       justify-content: space-between;
-      align-items: center;
-      flex-shrink: 0;
-      margin-bottom: 7px;
+      align-items: flex-start;
+      margin-bottom: 14px;
     }
 
     .card-title {
       font-size: 11px;
       font-weight: 600;
-      color: #555555;
+      color: var(--text-title);
       text-transform: uppercase;
-      letter-spacing: 0.4px;
+      letter-spacing: 0.8px;
     }
 
-    .big-number {
-      font-family: 'Playfair Display', serif;
-      font-size: 26px;
-      font-weight: 700;
-      line-height: 1.1;
-      margin-bottom: 2px;
-      flex-shrink: 0;
-    }
-
-    .subtitle {
-      font-size: 11px;
-      font-weight: 400;
-      color: #777777;
-      flex-shrink: 0;
-    }
-
-    .rag-badge {
+    .badge {
+      border-radius: 6px;
+      padding: 3px 10px;
       font-size: 10px;
       font-weight: 700;
-      padding: 3px 8px;
-      border-radius: 5px;
-      letter-spacing: 0.2px;
-      flex-shrink: 0;
+      letter-spacing: 0.4px;
+      white-space: nowrap;
     }
 
-    /* Color utilities */
-    .bg-navy  { background-color: var(--navy);     color: var(--white); }
-    .bg-amber { background-color: var(--amber);    color: #7a4e00 !important; }
-    .bg-red   { background-color: var(--red);      color: var(--white); }
-    .bg-pink  { background-color: var(--pink);     color: var(--white); }
-    .bg-gray  { background-color: var(--gray);     color: var(--white); }
-    .bg-dark-red { background-color: var(--dark-red); color: var(--white); }
-    .bg-orange   { background-color: var(--orange);    color: var(--white); }
+    .badge.dat { background: var(--primary); color: var(--white); }
+    .badge.chu_y { background: var(--warning); color: #7a4e00; }
+    .badge.nguy_hiem { background: var(--alert); color: var(--white); }
 
-    .text-navy  { color: var(--navy); }
-    .text-amber { color: var(--amber); }
-    .text-red   { color: var(--red); }
-    .text-green { color: var(--green); }
-    .text-white { color: var(--white); }
-
-    /* ===== CHART WRAPPERS — flex:1 fills remaining card space ===== */
-    .sparkline-wrapper,
-    .line-chart-wrapper,
-    .gauge-wrapper,
-    .ticker-wrapper {
-      flex: 1;
-      min-height: 0;
-      position: relative;
-      margin-top: 6px;
+    .drill-hint {
+      position: absolute;
+      bottom: 12px;
+      right: 16px;
+      font-size: 10px;
+      color: var(--primary);
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    .card:hover .drill-hint {
+      opacity: 0.6;
     }
 
-    .gauge-wrapper {
-      display: flex;
-      justify-content: center;
-      align-items: flex-end;
+    /* TYPOGRAPHY */
+    .big-number {
+      font-family: var(--font-display);
+      font-size: 32px;
+      font-weight: 700;
+      line-height: 1.1;
+    }
+    .big-number.navy { color: var(--primary); }
+    .big-number.amber { color: var(--warning); }
+    .big-number.red { color: var(--alert); }
+
+    .sub-text {
+      font-size: 12px;
+      color: var(--text-sub);
+      margin-top: 4px;
     }
 
-    /* ===== PROGRESS BARS ===== */
+    /* PROGRESS BAR */
     .progress-bar-bg {
-      height: 5px;
-      background: #F0F0F0;
-      border-radius: 2.5px;
-      margin-top: 7px;
+      background: #eee;
+      height: 6px;
+      border-radius: 3px;
+      margin-top: 12px;
       overflow: hidden;
-      flex-shrink: 0;
     }
-
     .progress-bar-fill {
       height: 100%;
-      border-radius: 2.5px;
-      transition: width 0.3s ease;
+      border-radius: 3px;
+      transition: width 0.5s ease-in-out;
+    }
+    .progress-bar-fill.navy { background: var(--primary); }
+
+    /* CHARTS CONTAINER */
+    .chart-container {
+      position: relative;
+      width: 100%;
     }
 
-    /* ===== STACKED BAR (Channel) ===== */
-    .stacked-bar-container {
+    /* KPI 3 GRIDS */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    
+
+    
+    .kpi3-card {
+      background: var(--white);
+      border-radius: 14px;
+      padding: 20px 22px;
+      border: 1px solid rgba(19,70,134,0.08);
+      box-shadow: 0 2px 20px rgba(19,70,134,0.06);
+    }
+    
+    .growth-values {
       display: flex;
-      height: 18px;
-      border-radius: 9px;
-      overflow: hidden;
-      margin-top: 7px;
-      flex-shrink: 0;
+      gap: 16px;
+      margin-top: 8px;
+    }
+    .growth-item {
+      display: flex;
+      flex-direction: column;
+    }
+    .growth-num {
+      font-family: var(--font-display);
+      font-size: 26px;
+      color: var(--primary);
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+    }
+    .growth-arrow {
+      color: #4CAF50;
+      font-size: 14px;
+      margin-right: 4px;
+      font-family: var(--font-body);
+    }
+    .growth-label {
+      font-size: 10px;
+      color: var(--text-sub);
+      text-transform: uppercase;
+      margin-top: 4px;
     }
 
-    .stacked-segment {
+    /* TABLES */
+    .styled-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .styled-table th {
+      font-size: 11px;
+      color: #999;
+      text-transform: uppercase;
+      border-bottom: 1.5px solid #eee;
+      padding-bottom: 8px;
+      text-align: left;
+      font-weight: 600;
+    }
+    .styled-table th:not(:first-child) {
+      text-align: right;
+    }
+    .styled-table td {
+      font-size: 12px;
+      padding: 16px 8px;
+      border-bottom: 0.5px solid #f5f5f5;
+      font-weight: 400;
+    }
+    .styled-table td:not(:first-child) {
+      text-align: right;
+    }
+    .styled-table tr:nth-child(even) {
+      background-color: #fafafa;
+    }
+    .styled-table tr:last-child td {
+      border-bottom: none;
+    }
+    
+    .pill-margin {
+      border-radius: 4px;
+      padding: 3px 8px;
+      font-size: 11px;
+      font-weight: 600;
+      display: inline-block;
+    }
+    .pill-margin.navy { background: rgba(19,70,134,0.1); color: var(--primary); }
+    .pill-margin.amber { background: rgba(254,178,26,0.15); color: #7a4e00; }
+
+    /* KPI 5 HORIZONTAL STACKED BAR */
+    .stacked-bar {
+      display: flex;
+      height: 28px;
+      border-radius: 14px;
+      overflow: hidden;
+      margin-top: 12px;
+    }
+    .segment {
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 10px;
+      color: var(--white);
+      font-size: 11px;
       font-weight: 600;
-      transition: width 0.3s ease;
+      transition: width 0.5s ease-in-out;
     }
-
+    .seg-navy { background: var(--primary); }
+    .seg-amber { background: var(--warning); color: #7a4e00;}
+    .seg-pink { background: #C2185B; }
+    .seg-grey { background: #9E9E9E; }
+    
     .legend-row {
       display: flex;
-      gap: 8px;
-      margin-top: 6px;
-      justify-content: center;
-      flex-shrink: 0;
+      gap: 16px;
+      margin-top: 12px;
+      font-size: 11px;
+      flex-wrap: wrap;
     }
-
     .legend-item {
       display: flex;
       align-items: center;
-      gap: 3px;
-      font-size: 10px;
-      font-weight: 500;
+      gap: 4px;
     }
-
-    .legend-dot {
-      width: 7px;
-      height: 7px;
+    .dot {
+      width: 10px;
+      height: 10px;
       border-radius: 50%;
-      flex-shrink: 0;
     }
-
-    /* ===== ROAS ===== */
+    
+    /* KPI 6 TWO METRICS */
+    .split-card {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+    }
+    .split-divider {
+      width: 1px;
+      background: #eee;
+      margin: 0 16px;
+    }
+    .split-metric .small-label {
+      font-size: 10px;
+      color: var(--text-sub);
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    
+    /* KPI 7 ROAS */
     .roas-container {
       position: relative;
-      margin-top: 8px;
-      padding-top: 12px;
-      flex: 1;
-      min-height: 0;
+      margin-top: 16px;
+      padding-top: 10px;
     }
-
-    .roas-target-line {
-      position: absolute;
-      top: 0; bottom: 0;
-      left: 80%;
-      border-left: 1.5px dashed #bbb;
-      z-index: 1;
-    }
-
-    .roas-target-label {
+    .target-line {
       position: absolute;
       top: 0;
-      left: 80%;
-      transform: translateX(-50%);
-      font-size: 9px;
-      font-weight: 700;
-      color: #999;
+      left: 80%; /* 4.0x out of 5.0x max */
+      bottom: 0;
+      border-left: 1px dashed #bbb;
+      z-index: 1;
     }
-
+    .target-line-label {
+      position: absolute;
+      top: -12px;
+      left: -20px;
+      font-size: 10px;
+      color: #888;
+    }
     .roas-row {
       display: flex;
       align-items: center;
-      margin-bottom: 8px;
+      margin-bottom: 12px;
+      position: relative;
+      z-index: 2;
     }
-
-    .roas-label { width: 60px; font-size: 10px; font-weight: 600; flex-shrink: 0; }
-
-    .roas-bar-bg {
+    .roas-label {
+      width: 70px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .roas-bar-wrapper {
       flex: 1;
-      height: 18px;
-      background: #F0F0F0;
-      border-radius: 9px;
+      background: #eee;
+      height: 26px;
+      border-radius: 13px;
       overflow: hidden;
+      position: relative;
     }
-
-    .roas-bar-fill {
+    .roas-bar {
       height: 100%;
       display: flex;
       align-items: center;
-      padding-left: 7px;
+      padding-left: 10px;
       color: var(--white);
-      font-size: 10px;
-      font-weight: 600;
-    }
-
-    /* ===== SKU TABLE ===== */
-    .sku-table {
-      width: 100%;
-      border-collapse: collapse;
-      flex: 1;
-      min-height: 0;
-    }
-
-    .sku-table th {
-      text-align: left;
-      padding: 4px 5px;
-      border-bottom: 1px solid #EEE;
-      color: #888;
-      font-weight: 600;
-      font-size: 10px;
-      letter-spacing: 0.2px;
-      flex-shrink: 0;
-    }
-
-    .sku-table td {
-      padding: 5px 5px;
-      border-bottom: 1px solid #F5F5F5;
-      vertical-align: middle;
-      font-weight: 400;
       font-size: 11px;
-    }
-
-    .sku-table tr:nth-child(even) { background-color: #FAFAFA; }
-
-    .margin-cell {
-      border-radius: 3px;
-      text-align: center;
-      font-weight: 700;
-      padding: 1px 0;
-      font-size: 10px;
-    }
-
-    /* ===== SEGMENTED (Expiry) ===== */
-    .segmented-bar-wrapper {
-      display: flex;
-      height: 8px;
-      border-radius: 4px;
-      overflow: hidden;
-      margin-top: 6px;
-      flex-shrink: 0;
-    }
-
-    /* ===== CCC ===== */
-    .ccc-pill-container { display: flex; gap: 6px; margin-top: 7px; flex-shrink: 0; }
-
-    .ccc-pill {
-      display: inline-flex;
-      align-items: center;
-      padding: 3px 8px;
-      background: #F0F4FA;
-      border: 0.5px solid #D0DAF0;
-      border-radius: 5px;
-      font-size: 10px;
       font-weight: 600;
-      color: #134686;
-    }
-
-    .ccc-formula { font-size: 10px; color: #999; margin-top: 5px; font-style: italic; flex-shrink: 0; }
-
-    /* ===== HEATMAP — fills card via flex:1 ===== */
-    .hm-grid {
-      display: grid;
-      grid-template-columns: 1.6fr 1fr 1fr 1fr;
-      grid-template-rows: 18px repeat(6, 1fr);
-      gap: 3px;
-      flex: 1;
-      min-height: 0;
-      margin-top: 6px;
-    }
-
-    .hm-cell {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 10px;
-      font-weight: 600;
-      border-radius: 5px;
-      padding: 0;
-      overflow: hidden;
-    }
-
-    .hm-header { color: var(--text-muted); font-size: 10px; background: transparent; }
-
-    .hm-row-label {
-      justify-content: flex-start;
-      padding-left: 2px;
-      font-size: 10px;
-      font-weight: 500;
-      color: #444;
-      background: transparent;
+      transition: width 0.5s ease-in-out;
       white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
     }
-
-    /* ===== TICKER ===== */
-    .border-red-light { border: 1px solid #FFCDD2; }
-
-    .ticker-content {
-      animation: scroll 8s linear infinite;
+    .roas-bar.navy { background: var(--primary); }
+    .roas-bar.amber { background: var(--warning); color: #7a4e00; }
+    .roas-bar.red { background: var(--alert); }
+    
+    /* KPI 8 & 9 */
+    .segmented-progress {
       display: flex;
-      flex-direction: column;
-      gap: 5px;
+      height: 12px;
+      border-radius: 6px;
+      overflow: hidden;
+      margin-top: 12px;
+    }
+    .seg-red-dark { background: #d32f2f; }
+    .seg-orange { background: #ff9800; }
+    
+    .alert-box {
+      margin-top: 12px;
+      padding: 10px 14px;
+      font-size: 12px;
+    }
+    .alert-box.warning {
+      background: #FFF8E1;
+      border-left: 3px solid var(--warning);
+      border-radius: 0 8px 8px 0;
+      color: #7a4e00;
+    }
+    .alert-box.danger {
+      background: #FFF5F5;
+      border-left: 3px solid var(--alert);
+      border-radius: 0 8px 8px 0;
+      color: #7B1111;
     }
 
+    .pill-group {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .pill-info {
+      flex: 1;
+      text-align: center;
+      background: #F0F4FA;
+      border: 1px solid #D0DAF0;
+      border-radius: 8px;
+      padding: 5px 12px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--primary);
+    }
+    .formula {
+      font-size: 11px;
+      color: #aaa;
+      font-style: italic;
+      margin-top: 8px;
+    }
+
+    /* KPI ALERT 1 */
+    .alert-card {
+      border: 1px solid #FFCDD2;
+    }
+    .ticker-container {
+      height: 120px;
+      overflow: hidden;
+      position: relative;
+    }
+    .ticker-wrapper {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      animation: ticker 10s linear infinite;
+    }
     .ticker-item {
       display: flex;
-      align-items: flex-start;
-      gap: 8px;
-      padding: 7px 9px;
+      gap: 10px;
+      padding: 12px;
       background: #FFFBFB;
-      border: 1px solid #FFEBEE;
-      border-radius: 7px;
+      border: 0.5px solid #FFEBEE;
+      border-radius: 8px;
+      font-size: 12px;
+      margin-bottom: 8px;
+      align-items: center;
+      cursor: pointer;
+      transition: all 0.2s ease;
     }
-
-    .ticker-text { font-size: 11px; font-weight: 500; line-height: 1.4; }
-
-    @keyframes scroll {
-      0%   { transform: translateY(0); }
+    .ticker-item:hover {
+      background: #FFF0F0;
+      border-color: #FFCDD2;
+      transform: translateX(4px);
+    }
+    @keyframes ticker {
+      0% { transform: translateY(0); }
       100% { transform: translateY(-50%); }
     }
 
-    /* ===== DEFECT ===== */
-    .border-left-red { border-left: 4px solid var(--red); }
-
-    /* ===== ALERT BOX ===== */
-    .alert-box {
-      background: #FFEBEE;
-      color: var(--dark-red);
-      padding: 6px 10px;
-      border-radius: 7px;
+    /* KPI ALERT 2 */
+    .defect-card {
+      border-left: 4px solid var(--alert);
+    }
+    
+    /* STOCKOUT HEATMAP */
+    .heatmap-grid {
+      display: grid;
+      grid-template-columns: 1.5fr 1fr 1fr 1fr;
+      gap: 4px;
+      margin-top: 8px;
+    }
+    .hm-header {
       font-size: 11px;
+      color: #888;
       font-weight: 600;
+      text-align: center;
+      padding-bottom: 4px;
+    }
+    .hm-label {
+      font-size: 11px;
+      color: #444;
+      text-align: left;
       display: flex;
       align-items: center;
-      gap: 6px;
-      margin-top: 6px;
-      flex-shrink: 0;
     }
-
-    .alert-box.amber { background: #FFF8E1; color: #7a4e00; }
-
-    /* ===== GROWTH CARD ===== */
-    .growth-number {
-      font-size: 22px;
-      font-weight: 700;
-      font-family: 'Playfair Display', serif;
-    }
-
-    .growth-label {
+    .hm-cell {
+      border-radius: 6px;
       font-size: 10px;
       font-weight: 600;
-      color: #888;
-      margin-top: 2px;
-      text-transform: uppercase;
-      letter-spacing: 0.4px;
+      text-align: center;
+      padding: 8px 4px;
     }
+    .hm-cell.navy { background: var(--primary); color: var(--white); }
+    .hm-cell.amber { background: var(--warning); color: #7a4e00; }
+    .hm-cell.red { background: var(--alert); color: var(--white); }
 
-    /* ===== FOOTER ===== */
-    .footer {
-      display: none; /* Hidden to preserve space in fixed 900px layout */
+    /* SUMMARY CARD */
+    .summary-card {
+      background: var(--primary);
+      border: none;
+      padding: 30px 22px;
     }
-
-    /* ===== MODALS ===== */
-    .modal-overlay {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(19,70,134,0.18);
-      backdrop-filter: blur(3px);
-      z-index: 1000;
+    .summary-card .card-title {
+      color: rgba(255,255,255,0.6);
+    }
+    .summary-row {
+      display: flex;
+      justify-content: space-between;
       align-items: center;
+      margin-bottom: 8px;
+    }
+    .summary-label {
+      font-size: 12px;
+      color: var(--white);
+    }
+    .summary-val {
+      font-family: var(--font-display);
+      font-size: 24px;
+      font-weight: 700;
+    }
+    .summary-val.white { color: var(--white); }
+    .summary-val.amber { color: var(--warning); }
+    .summary-val.red { color: var(--alert); }
+    
+    .summary-progress-bg {
+      background: rgba(255,255,255,0.15);
+      height: 3px;
+      width: 100%;
+      margin-bottom: 16px;
+    }
+    .summary-progress-fill {
+      background: rgba(255,255,255,0.5);
+      height: 100%;
+      width: 50%;
+    }
+    .summary-divider {
+      height: 1px;
+      background: rgba(255,255,255,0.15);
+      margin: 12px 0;
+    }
+    .summary-time {
+      font-size: 10px;
+      color: rgba(255,255,255,0.4);
+    }
+
+    /* MODAL */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(19,70,134,0.15);
+      backdrop-filter: blur(4px);
+      display: none;
       justify-content: center;
+      align-items: center;
+      z-index: 1000;
+      opacity: 0;
+      transition: opacity 0.3s;
     }
-
-    .modal-overlay.active { display: flex; }
-
+    .modal-overlay.show {
+      display: flex;
+      opacity: 1;
+    }
     .modal-box {
-      background: #FFFFFF;
+      background: var(--white);
       border-radius: 16px;
+      width: 540px;
       padding: 28px 32px;
-      width: 560px;
-      max-height: 80vh;
-      overflow-y: auto;
-      box-shadow: 0 24px 80px rgba(19,70,134,0.18);
+      box-shadow: 0 10px 40px rgba(0,0,0,0.1);
       position: relative;
-      cursor: default;
+      transform: translateY(20px);
+      transition: transform 0.3s;
     }
-
+    .modal-overlay.show .modal-box {
+      transform: translateY(0);
+    }
     .modal-close {
       position: absolute;
-      top: 16px;
-      right: 20px;
-      font-size: 20px;
+      top: 20px;
+      right: 24px;
+      font-size: 24px;
       cursor: pointer;
-      color: #999;
-      font-weight: 300;
+      color: #888;
     }
-
-    .modal-close:hover { color: #333; }
-
     .modal-title {
-      font-size: 20px;
-      font-weight: 700;
-      color: var(--navy);
-      font-family: 'Playfair Display', serif;
-      margin-bottom: 4px;
-    }
-
-    .modal-subtitle { font-size: 12px; color: #999; margin-bottom: 20px; }
-
-    .modal-kpi-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
-      gap: 12px;
+      font-family: var(--font-display);
+      font-size: 24px;
+      color: var(--primary);
       margin-bottom: 20px;
     }
+    .modal-content {
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .insight-box {
+      background: var(--bg);
+      border-left: 3px solid var(--warning);
+      padding: 14px 16px;
+      border-radius: 0 8px 8px 0;
+      font-size: 13px;
+      margin-top: 16px;
+    }
 
-    .modal-kpi { background: #F5F7FA; border-radius: 8px; padding: 12px; }
-    .modal-kpi-label { font-size: 11px; color: #888; margin-bottom: 4px; }
-    .modal-kpi-val { font-size: 22px; font-weight: 700; font-family: 'Playfair Display', serif; color: var(--navy); }
-    .modal-kpi-delta { font-size: 11px; color: #2E7D32; margin-top: 2px; }
-    .modal-section-title { font-size: 12px; font-weight: 700; color: #555; text-transform: uppercase; letter-spacing: 0.5px; margin: 16px 0 8px; }
-    .modal-insight { font-size: 13px; color: #444; line-height: 1.6; padding: 12px; background: #FDF4E3; border-radius: 8px; border-left: 3px solid #FEB21A; }
+    /* FOOTER */
+    footer {
+      border-top: 1px solid rgba(19,70,134,0.08);
+      padding-top: 16px;
+      margin-top: 28px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: #aaa;
+    }
   </style>
 </head>
-
 <body>
 
-  <header class="header">
-    <div class="logo-area">
-      <img src="logo-footer.png" alt="Yến Việt Logo"
-        style="height: 38px; width: auto; margin-right: 12px; object-fit: contain;">
-      <div>
-        <h1>Yến Việt</h1>
-        <h2>CEO Dashboard &middot; Tháng 6/2026</h2>
+  <!-- HEADER -->
+  <header>
+    <div class="header-left">
+      <img src="../Yến%20Việt%20/logo-footer.png" alt="Yến Việt Logo" style="height: 48px; object-fit: contain;">
+      <div class="header-title-container">
+        <div class="header-title">Yến Việt</div>
+        <div class="header-subtitle">CEO Dashboard · Layer 1 · Tháng 6/2026</div>
       </div>
     </div>
-    <div class="header-actions">
-      <div class="time-filters">
-        <span class="filter-pill active">Tháng này</span>
-        <span class="filter-pill">QTD</span>
-        <span class="filter-pill">YTD</span>
+    <div class="header-right">
+      <div class="filter-pills">
+        <div class="pill active" onclick="setPeriod('thang')">Tháng này</div>
+        <div class="pill" onclick="setPeriod('qtd')">QTD</div>
+        <div class="pill" onclick="setPeriod('ytd')">YTD</div>
       </div>
-      <span style="font-size:11px;color:#999;font-weight:500;">
-        <span id="period-label">Tháng 6/2026</span> &middot;
-        <span style="color:var(--navy);font-weight:700;">● LIVE</span>
-      </span>
+      <div class="timestamp">
+        <span class="live-update-time">Cập nhật: 09:00 · 01/06/2026</span> · <span class="live-dot">● LIVE</span>
+      </div>
     </div>
   </header>
-
-  <main class="dashboard-grid">
-
-    <!-- ========== CỘT 1: TÀI CHÍNH & BÁN HÀNG ========== -->
-    <div class="col-1">
-
-      <!-- Row 1: KPI 1 — Tổng Doanh Thu -->
+  <!-- DASHBOARD GRID -->
+  <div class="dashboard">
+    <!-- CỘT 1 -->
+    <div class="col">
+      <!-- KPI 1: TỔNG DOANH THU -->
       <div class="card" onclick="openModal('revenue')">
         <div class="card-header">
-          <span class="card-title">Tổng Doanh Thu</span>
-          <span class="rag-badge bg-navy" id="rev-badge">ĐẠT</span>
+          <div class="card-title">TỔNG DOANH THU</div>
+          <div class="badge dat" id="rev-badge">ĐẠT</div>
         </div>
-        <div class="big-number text-navy" id="rev-actual">25,4 tỷ</div>
-        <div class="subtitle" id="rev-subtitle">Mục tiêu: 26,0 tỷ &middot; Đạt 97,7%</div>
+        <div class="big-number navy" id="rev-val">25,4 tỷ</div>
+        <div class="sub-text" id="rev-sub">Mục tiêu 26,0 tỷ · Đạt 97,7%</div>
         <div class="progress-bar-bg">
-          <div class="progress-bar-fill bg-navy" id="rev-progress" style="width:97.7%"></div>
+          <div class="progress-bar-fill navy" id="rev-progress" style="width: 97.7%"></div>
         </div>
-        <div class="sparkline-wrapper">
-          <canvas id="revenueSparkline" style="width:100%;height:100%;"></canvas>
+        <div class="chart-container" style="height: 56px; margin-top: 12px;">
+          <canvas id="revChart"></canvas>
         </div>
-        <span class="card-drill-hint">↗ Xem chi tiết</span>
+        <div class="drill-hint">↗ Xem chi tiết</div>
       </div>
 
-      <!-- Row 2: KPI 2 — Gross Margin -->
+      <!-- KPI 2: BIÊN LỢI NHUẬN GỘP -->
       <div class="card" onclick="openModal('margin')">
         <div class="card-header">
-          <span class="card-title">Biên Lợi Nhuận Gộp (Gross Margin)</span>
-          <span class="rag-badge bg-amber" id="margin-badge">CHÚ Ý</span>
+          <div class="card-title">GROSS MARGIN</div>
+          <div class="badge chu_y" id="margin-badge">CHÚ Ý</div>
         </div>
-        <div class="big-number text-amber" id="margin-actual">45,0%</div>
-        <div class="subtitle">Mục tiêu: 48,0%</div>
-        <div class="line-chart-wrapper">
-          <canvas id="marginLineChart" style="width:100%;height:100%;"></canvas>
+        <div class="big-number amber" id="margin-val">45,0%</div>
+        <div class="sub-text" id="margin-sub">Mục tiêu 48,0% · Hụt 3,0 điểm %</div>
+        <div class="chart-container" style="height: 110px; margin-top: 8px;">
+          <canvas id="marginChart"></canvas>
         </div>
-        <span class="card-drill-hint">↗ Xem chi tiết</span>
+        <div class="drill-hint">↗ Xem chi tiết</div>
       </div>
 
-      <!-- Row 3: Tăng Trưởng + EBITDA song song -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;height:100%;">
-
-        <!-- Card A: Growth -->
-        <div class="card">
-          <div class="card-header">
-            <span class="card-title">Tăng Trưởng</span>
-          </div>
-          <div style="display:flex;gap:14px;align-items:center;flex:1;">
-            <div>
-              <div class="growth-number text-navy">
-                <span class="text-green" style="font-size:12px;">&uarr;</span>
-                <span id="growth-mom">+12,2%</span>
-              </div>
-              <div class="growth-label">MoM</div>
+      <!-- KPI 3: TĂNG TRƯỞNG + EBITDA -->
+      <div class="grid-2">
+        <div class="kpi3-card">
+          <div class="card-title">TĂNG TRƯỞNG</div>
+          <div class="growth-values">
+            <div class="growth-item">
+              <div class="growth-num"><span class="growth-arrow">↑</span><span id="mom-val">+12,2%</span></div>
+              <div class="growth-label">MOM</div>
             </div>
-            <div>
-              <div class="growth-number text-navy">
-                <span class="text-green" style="font-size:12px;">&uarr;</span>
-                <span id="growth-yoy">+18,5%</span>
-              </div>
-              <div class="growth-label">YoY</div>
+            <div class="growth-item">
+              <div class="growth-num"><span class="growth-arrow">↑</span><span id="yoy-val">+18,5%</span></div>
+              <div class="growth-label">YOY</div>
             </div>
           </div>
         </div>
-
-        <!-- Card B: EBITDA -->
-        <div class="card">
-          <div class="card-header">
-            <span class="card-title">EBITDA</span>
-          </div>
-          <div class="big-number text-navy" id="ebitda-val" style="font-size:22px;">3,7 tỷ</div>
-          <div class="subtitle" id="ebitda-margin">Margin 14,8% &middot; Target 13,0%</div>
-          <div class="progress-bar-bg" style="margin-top:auto;">
-            <div class="progress-bar-fill bg-navy" style="width:74%"></div>
+        <div class="kpi3-card">
+          <div class="card-title">EBITDA</div>
+          <div class="big-number navy" id="ebitda-val" style="font-size: 28px; margin-top: 8px;">3,7 tỷ</div>
+          <div class="sub-text" id="ebitda-sub">Margin 14,8% · Target 13,0%</div>
+          <div class="progress-bar-bg">
+            <div class="progress-bar-fill navy" id="ebitda-progress" style="width: 74%"></div>
           </div>
         </div>
       </div>
 
-      <!-- Row 4: Top 5 Hero SKUs -->
+      <!-- KPI 4: TOP 5 HERO SKUs -->
       <div class="card">
-        <div class="card-header">
-          <span class="card-title">Top 5 Hero SKUs</span>
+        <div class="card-header" style="margin-bottom: 8px;">
+          <div class="card-title">TOP 5 HERO SKUs</div>
         </div>
-        <table class="sku-table">
+        <table class="styled-table">
           <thead>
             <tr>
               <th>Tên SKU</th>
-              <th>Doanh Thu</th>
-              <th style="text-align:center;">Margin</th>
-              <th style="text-align:right;">Trạng Thái</th>
+              <th>Doanh thu</th>
+              <th>Margin</th>
+              <th>Trạng thái</th>
             </tr>
           </thead>
           <tbody>
             <tr>
-              <td>Tổ yến tinh chế 100g</td><td>8,5 tỷ</td>
-              <td><div class="margin-cell bg-navy">52%</div></td>
-              <td style="text-align:right;"><span class="rag-badge bg-navy">TỐT</span></td>
+              <td>Tổ yến tinh chế 100g</td>
+              <td>8,5 tỷ</td>
+              <td><span class="pill-margin navy">52%</span></td>
+              <td><span class="badge dat">ĐẠT</span></td>
             </tr>
             <tr>
-              <td>Combo Yến chưng 20 lọ</td><td>5,2 tỷ</td>
-              <td><div class="margin-cell bg-amber">41%</div></td>
-              <td style="text-align:right;"><span class="rag-badge bg-amber">CHÚ Ý</span></td>
+              <td>Combo Yến chưng 20 lọ</td>
+              <td>5,2 tỷ</td>
+              <td><span class="pill-margin amber">41%</span></td>
+              <td><span class="badge chu_y">CHÚ Ý</span></td>
             </tr>
             <tr>
-              <td>Cháo yến Nest IQ</td><td>3,1 tỷ</td>
-              <td><div class="margin-cell bg-amber">38%</div></td>
-              <td style="text-align:right;"><span class="rag-badge bg-amber">CHÚ Ý</span></td>
+              <td>Cháo yến Nest IQ</td>
+              <td>3,1 tỷ</td>
+              <td><span class="pill-margin amber">38%</span></td>
+              <td><span class="badge chu_y">CHÚ Ý</span></td>
             </tr>
             <tr>
-              <td>Hộp quà Tết Yến Sào</td><td>2,8 tỷ</td>
-              <td><div class="margin-cell bg-navy">45%</div></td>
-              <td style="text-align:right;"><span class="rag-badge bg-navy">TỐT</span></td>
+              <td>Hộp quà Tết Yến Sào</td>
+              <td>2,8 tỷ</td>
+              <td><span class="pill-margin navy">45%</span></td>
+              <td><span class="badge dat">ĐẠT</span></td>
             </tr>
             <tr>
-              <td>Nước yến Đông Trùng</td><td>2,1 tỷ</td>
-              <td><div class="margin-cell bg-navy">49%</div></td>
-              <td style="text-align:right;"><span class="rag-badge bg-navy">TỐT</span></td>
+              <td>Nước yến Đông Trùng</td>
+              <td>2,1 tỷ</td>
+              <td><span class="pill-margin navy">49%</span></td>
+              <td><span class="badge dat">ĐẠT</span></td>
             </tr>
           </tbody>
         </table>
       </div>
-
     </div>
 
-    <!-- ========== CỘT 2: KÊNH & VẬN HÀNH ========== -->
-    <div class="col-2">
-
-      <!-- Row 1: Cơ Cấu Kênh -->
+    <!-- CỘT 2 -->
+    <div class="col">
+      <!-- KPI 5: CƠ CẤU DOANH THU KÊNH -->
       <div class="card">
         <div class="card-header">
-          <span class="card-title">Cơ Cấu Doanh Thu Kênh</span>
+          <div class="card-title">CƠ CẤU DOANH THU KÊNH</div>
         </div>
-        <div style="font-size:10px;color:#777;margin-bottom:2px;font-weight:600;flex-shrink:0;">
-          Tổng: <strong id="ch-total" style="color:#134686">25,4 tỷ đồng</strong>
-        </div>
-        <div class="stacked-bar-container">
-          <div class="stacked-segment bg-navy" id="seg-offline" style="width:47.2%">12,0</div>
-          <div class="stacked-segment bg-amber" id="seg-shopee" style="width:23.6%">6,0</div>
-          <div class="stacked-segment bg-pink" id="seg-tiktok" style="width:19.7%">5,0</div>
-          <div class="stacked-segment bg-gray" id="seg-b2b" style="width:9.5%">2,4</div>
+        <div style="font-size: 12px;">Tổng: <span style="font-weight: bold; color: var(--primary);" id="ch-total">25,4 tỷ</span> đồng</div>
+        <div class="stacked-bar">
+          <div class="segment seg-navy" id="seg-offline" style="width: 47.2%">47.2%</div>
+          <div class="segment seg-amber" id="seg-shopee" style="width: 23.6%">23.6%</div>
+          <div class="segment seg-pink" id="seg-tiktok" style="width: 19.7%">19.7%</div>
+          <div class="segment seg-grey" id="seg-b2b" style="width: 9.5%">9.5%</div>
         </div>
         <div class="legend-row">
-          <div class="legend-item"><div class="legend-dot bg-navy"></div>Offline</div>
-          <div class="legend-item"><div class="legend-dot bg-amber"></div>Shopee</div>
-          <div class="legend-item"><div class="legend-dot bg-pink"></div>TikTok</div>
-          <div class="legend-item"><div class="legend-dot bg-gray"></div>B2B</div>
+          <div class="legend-item"><div class="dot seg-navy"></div>Offline 47%</div>
+          <div class="legend-item"><div class="dot seg-amber"></div>Shopee 24%</div>
+          <div class="legend-item"><div class="dot seg-pink"></div>TikTok 20%</div>
+          <div class="legend-item"><div class="dot seg-grey"></div>B2B 9%</div>
         </div>
       </div>
 
-      <!-- Row 2: OTIF + Coverage -->
-      <div class="card">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;height:100%;">
-          <div>
-            <div class="card-title" style="margin-bottom:5px;">OTIF (Đúng - Đủ)</div>
-            <div class="big-number text-amber" id="otif-val" style="font-size:22px;">94,2%</div>
-            <span class="rag-badge bg-amber" style="display:inline-block;margin:3px 0;">CHÚ Ý</span>
-            <div class="subtitle">Target &ge; 95%</div>
+      <!-- KPI 6: OTIF & ĐỘ PHỦ -->
+      <div class="card split-card">
+        <div class="split-metric">
+          <div class="small-label">OTIF (GIAO ĐÚNG - ĐỦ)</div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <div class="big-number amber" style="font-size: 28px;" id="otif-val">94,2%</div>
+            <div class="badge chu_y">CHÚ Ý</div>
           </div>
-          <div>
-            <div class="card-title" style="margin-bottom:5px;">Độ Phủ Điểm Bán</div>
-            <div class="big-number text-amber" id="coverage-val" style="font-size:22px;">81 / 100</div>
-            <span class="rag-badge bg-amber" style="display:inline-block;margin:3px 0;">CHÚ Ý</span>
-            <div class="subtitle">63 tỉnh &middot; Target 85 điểm</div>
+          <div class="sub-text">Target ≥ 95%</div>
+        </div>
+        <div class="split-divider"></div>
+        <div class="split-metric">
+          <div class="small-label">ĐỘ PHỦ ĐIỂM BÁN</div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <div class="big-number amber" style="font-size: 28px;" id="coverage-val">81/100</div>
+            <div class="badge chu_y">CHÚ Ý</div>
           </div>
+          <div class="sub-text">63 tỉnh · Target 85 điểm</div>
         </div>
       </div>
 
-      <!-- Row 3: ROAS -->
+      <!-- KPI 7: ROAS TOÀN KÊNH -->
       <div class="card">
         <div class="card-header">
-          <span class="card-title">ROAS Toàn Kênh</span>
+          <div class="card-title">ROAS TOÀN KÊNH</div>
         </div>
         <div class="roas-container">
-          <div class="roas-target-label">Mục tiêu 4.0</div>
-          <div class="roas-target-line"></div>
+          <div class="target-line" style="left: 80%;">
+            <div class="target-line-label">Target 4,0×</div>
+          </div>
           <div class="roas-row">
             <div class="roas-label">Shopee</div>
-            <div class="roas-bar-bg"><div class="roas-bar-fill bg-navy" style="width:90%">4,5x</div></div>
+            <div class="roas-bar-wrapper">
+              <div class="roas-bar navy" style="width: 90%;">4,5×</div>
+            </div>
           </div>
           <div class="roas-row">
             <div class="roas-label">TikTok</div>
-            <div class="roas-bar-bg"><div class="roas-bar-fill bg-amber" style="width:56%">2,8x</div></div>
+            <div class="roas-bar-wrapper">
+              <div class="roas-bar amber" style="width: 56%;">2,8×</div>
+            </div>
           </div>
-          <div class="roas-row" style="margin-bottom:0;">
+          <div class="roas-row">
             <div class="roas-label">Facebook</div>
-            <div class="roas-bar-bg"><div class="roas-bar-fill bg-red" style="width:30%">1,5x</div></div>
+            <div class="roas-bar-wrapper">
+              <div class="roas-bar red" style="width: 30%;">1,5×</div>
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- Row 4: Tồn Kho Cận Date -->
+      <!-- KPI 8: TỒN KHO CẬN HẠN SỬ DỤNG -->
       <div class="card">
         <div class="card-header">
-          <span class="card-title">Tồn Kho Cận Date</span>
-          <span class="rag-badge bg-amber">CHÚ Ý</span>
+          <div class="card-title">TỒN KHO CẬN HSD</div>
+          <div class="badge chu_y">CHÚ Ý</div>
         </div>
-        <div class="big-number text-amber" style="font-size:22px;">1,2 tỷ</div>
-        <div class="subtitle">4,0% tổng kho</div>
-        <div class="segmented-bar-wrapper">
-          <div class="bg-dark-red" style="width:25%"></div>
-          <div class="bg-orange" style="width:75%"></div>
+        <div class="big-number amber" style="font-size: 30px;">1,2 tỷ</div>
+        <div class="sub-text">4,0% tổng kho giá trị</div>
+        <div class="segmented-progress">
+          <div class="segment seg-red-dark" style="width: 25%;"></div>
+          <div class="segment seg-orange" style="width: 75%;"></div>
         </div>
-        <div class="legend-row" style="justify-content:flex-start;">
-          <div class="legend-item"><div class="legend-dot bg-dark-red"></div>&lt;30 ngày</div>
-          <div class="legend-item"><div class="legend-dot bg-orange"></div>30-60 ngày</div>
+        <div class="legend-row" style="margin-top: 8px;">
+          <div class="legend-item"><div class="dot seg-red-dark"></div>&lt;30 ngày: 300 triệu</div>
+          <div class="legend-item"><div class="dot seg-orange"></div>30–60 ngày: 900 triệu</div>
         </div>
-        <div class="alert-box amber">&#9888; Cần đẩy hàng ngay</div>
+        <div class="alert-box warning">
+          ⚠ Cần đẩy hàng ngay — Ưu tiên KM online
+        </div>
       </div>
 
-      <!-- Row 5: CCC -->
+      <!-- KPI 9: CASH CONVERSION CYCLE -->
       <div class="card" onclick="openModal('ccc')">
         <div class="card-header">
-          <span class="card-title">Cash Conversion Cycle</span>
-          <span class="rag-badge bg-amber" id="ccc-badge">CHÚ Ý</span>
+          <div class="card-title">CASH CONVERSION CYCLE</div>
+          <div class="badge chu_y" id="ccc-badge">CHÚ Ý</div>
         </div>
-        <div class="big-number text-amber" id="ccc-days" style="font-size:22px;">42 ngày</div>
-        <div class="subtitle">Target &le; 35 ngày &middot; Cải thiện từ 47 ngày</div>
-        <div class="ccc-pill-container">
-          <div class="ccc-pill" id="ccc-dio">DIO: 28</div>
-          <div class="ccc-pill" id="ccc-dso">DSO: 22</div>
-          <div class="ccc-pill" id="ccc-dpo">DPO: 8</div>
+        <div class="big-number amber" style="font-size: 30px;" id="ccc-val">42 ngày</div>
+        <div class="sub-text" id="ccc-sub">Target ≤ 35 ngày · Cải thiện từ 47 ngày ↓</div>
+        <div class="pill-group">
+          <div class="pill-info" id="ccc-dio">DIO: 28 ngày</div>
+          <div class="pill-info" id="ccc-dso">DSO: 22 ngày</div>
+          <div class="pill-info" id="ccc-dpo">DPO: 8 ngày</div>
         </div>
-        <div class="ccc-formula">CCC = DIO + DSO &minus; DPO</div>
-        <span class="card-drill-hint">↗ Xem chi tiết</span>
+        <div class="formula">CCC = DIO + DSO − DPO</div>
+        <div class="drill-hint">↗ Xem chi tiết</div>
       </div>
-
     </div>
 
-    <!-- ========== CỘT 3: CẢNH BÁO ========== -->
-    <div class="col-3">
-
-      <!-- Row 1: Xung Đột Giá & Yến Giả -->
-      <div class="card border-red-light">
-        <div class="card-header">
-          <span class="card-title">Xung Đột Giá & Yến Giả</span>
+    <!-- CỘT 3 -->
+    <div class="col">
+      <!-- KPI ALERT 1: XUNG ĐỘT GIÁ & YẾN GIẢ -->
+      <div class="card alert-card">
+        <div class="card-header" style="margin-bottom: 8px;">
+          <div class="card-title">XUNG ĐỘT GIÁ & YẾN GIẢ</div>
         </div>
-        <div class="ticker-wrapper">
-          <div class="ticker-content">
-            <div class="ticker-item">
-              <span class="rag-badge bg-red" style="flex-shrink:0;">NGUY HIỂM</span>
-              <div class="ticker-text">Phát hiện 2 shop bán yến tinh chế giả mạo trên Shopee</div>
-            </div>
-            <div class="ticker-item">
-              <span class="rag-badge bg-amber" style="flex-shrink:0;">CHÚ Ý</span>
-              <div class="ticker-text">Đại lý KV Miền Trung phá giá -15% so với niêm yết</div>
-            </div>
-            <!-- Lặp lại cho seamless scroll -->
-            <div class="ticker-item">
-              <span class="rag-badge bg-red" style="flex-shrink:0;">NGUY HIỂM</span>
-              <div class="ticker-text">Phát hiện 2 shop bán yến tinh chế giả mạo trên Shopee</div>
-            </div>
-            <div class="ticker-item">
-              <span class="rag-badge bg-amber" style="flex-shrink:0;">CHÚ Ý</span>
-              <div class="ticker-text">Đại lý KV Miền Trung phá giá -15% so với niêm yết</div>
-            </div>
+        <div class="ticker-container">
+          <div class="ticker-wrapper">
+            <!-- X2 item để scroll loop mượt -->
+            <div class="ticker-item" onclick="window.open('https://tuoitre.vn/phat-nang-doanh-nghiep-dung-mu-trom-san-xuat-nuoc-yen-2020080412083108.htm', '_blank')" title="Đọc bài viết trên Tuổi Trẻ"><span class="badge nguy_hiem">GIẢ</span>TikTok Shop: Gian hàng mạo danh bán Yến sào trộn mủ trôm</div>
+            <div class="ticker-item" onclick="window.open('https://nld.com.vn/phan-biet-san-pham-yen-that-gia-196250517234111177.htm', '_blank')" title="Đọc bài viết trên Báo Người Lao Động"><span class="badge nguy_hiem">HÓA CHẤT</span>Cảnh báo: Yến vụn nhập lậu tẩy trắng bằng H2O2 gắn mác Yến Việt</div>
+            <div class="ticker-item" onclick="window.open('https://laodong.vn/ban-doc/400000-san-pham-nuoc-yen-gia-bi-thu-giu-va-con-bao-nhieu-truoc-do-nua-1702688.ldo', '_blank')" title="Đọc bài viết trên Báo Lao Động"><span class="badge chu_y">PHÁ GIÁ</span>Zalo: Nhóm đại lý cấp 2 xả lỗ Cháo yến Nest IQ</div>
+            <div class="ticker-item" onclick="window.open('https://yenviet.com.vn/', '_blank')" title="Xem website chính thức"><span class="badge chu_y">TRUYỀN THÔNG</span>Đẩy mạnh khuyến cáo KH mua tại Showroom chính hãng</div>
+            
+            <div class="ticker-item" onclick="window.open('https://tuoitre.vn/phat-nang-doanh-nghiep-dung-mu-trom-san-xuat-nuoc-yen-2020080412083108.htm', '_blank')" title="Đọc bài viết trên Tuổi Trẻ"><span class="badge nguy_hiem">GIẢ</span>TikTok Shop: Gian hàng mạo danh bán Yến sào trộn mủ trôm</div>
+            <div class="ticker-item" onclick="window.open('https://nld.com.vn/phan-biet-san-pham-yen-that-gia-196250517234111177.htm', '_blank')" title="Đọc bài viết trên Báo Người Lao Động"><span class="badge nguy_hiem">HÓA CHẤT</span>Cảnh báo: Yến vụn nhập lậu tẩy trắng bằng H2O2 gắn mác Yến Việt</div>
+            <div class="ticker-item" onclick="window.open('https://laodong.vn/ban-doc/400000-san-pham-nuoc-yen-gia-bi-thu-giu-va-con-bao-nhieu-truoc-do-nua-1702688.ldo', '_blank')" title="Đọc bài viết trên Báo Lao Động"><span class="badge chu_y">PHÁ GIÁ</span>Zalo: Nhóm đại lý cấp 2 xả lỗ Cháo yến Nest IQ</div>
+            <div class="ticker-item" onclick="window.open('https://yenviet.com.vn/', '_blank')" title="Xem website chính thức"><span class="badge chu_y">TRUYỀN THÔNG</span>Đẩy mạnh khuyến cáo KH mua tại Showroom chính hãng</div>
           </div>
         </div>
       </div>
 
-      <!-- Row 2: Defect & Khiếu Nại -->
-      <div class="card border-left-red" onclick="openModal('defect')">
-        <div class="card-header">
-          <span class="card-title">Defect & Khiếu Nại</span>
-          <span class="rag-badge bg-red">NGUY HIỂM</span>
+      <!-- KPI ALERT 2: DEFECT & KHIẾU NẠI -->
+      <div class="card defect-card" onclick="openModal('defect')">
+        <div class="card-header" style="margin-bottom: 0px;">
+          <div class="card-title">DEFECT & KHIẾU NẠI</div>
+          <div class="badge nguy_hiem">NGUY HIỂM</div>
         </div>
-        <div class="gauge-wrapper">
-          <canvas id="defectGauge" style="width:100%;height:100%;"></canvas>
+        <div class="chart-container" style="height: 130px; margin-top: 10px;">
+          <canvas id="gaugeChart"></canvas>
         </div>
-        <div style="text-align:center;margin-top:4px;font-family:'Playfair Display',serif;font-size:24px;font-weight:700;color:#ED3F27;line-height:1;flex-shrink:0;">0,8%</div>
-        <div style="text-align:center;font-size:10px;color:#999;margin-top:2px;flex-shrink:0;">Ngưỡng an toàn: &lt; 0,5%</div>
-        <div class="alert-box">&#9888; 1 khiếu nại nghiêm trọng &mdash; Lô SX 12/05</div>
-        <span class="card-drill-hint">↗ Xem chi tiết</span>
+        <div class="big-number red" style="font-size: 28px; text-align: center; margin-top: -20px;">0,8%</div>
+        <div style="font-size: 11px; color: #aaa; text-align: center; margin-top: 4px;">Ngưỡng an toàn: &lt; 0,5%</div>
+        <div class="alert-box danger">
+          ⚠ 1 khiếu nại nghiêm trọng — Lô Nước Yến Đông Trùng có cặn
+        </div>
+        <div class="drill-hint">↗ Xem chi tiết</div>
       </div>
 
-      <!-- Row 3: Stockout Heatmap (1fr — fill phần giữa) -->
+      <!-- STOCKOUT HEATMAP -->
       <div class="card" onclick="openModal('stockout')">
+        <div class="card-header" style="margin-bottom: 8px;">
+          <div class="card-title">STOCKOUT HEATMAP</div>
+        </div>
+        <div class="heatmap-grid">
+          <div class="hm-header"></div>
+          <div class="hm-header">HCM</div>
+          <div class="hm-header">HN</div>
+          <div class="hm-header">ĐN</div>
+
+          <div class="hm-label">Yến chưng</div>
+          <div class="hm-cell red">6,0%</div>
+          <div class="hm-cell navy">1,5%</div>
+          <div class="hm-cell amber">3,2%</div>
+
+          <div class="hm-label">Tinh chế</div>
+          <div class="hm-cell navy">1,0%</div>
+          <div class="hm-cell navy">0,5%</div>
+          <div class="hm-cell navy">1,2%</div>
+
+          <div class="hm-label">Cháo IQ</div>
+          <div class="hm-cell amber">4,5%</div>
+          <div class="hm-cell red">5,8%</div>
+          <div class="hm-cell navy">1,8%</div>
+
+          <div class="hm-label">Combo Tết</div>
+          <div class="hm-cell navy">0,0%</div>
+          <div class="hm-cell navy">0,0%</div>
+          <div class="hm-cell navy">0,0%</div>
+
+          <div class="hm-label">Nước yến</div>
+          <div class="hm-cell navy">1,2%</div>
+          <div class="hm-cell amber">2,5%</div>
+          <div class="hm-cell navy">1,0%</div>
+
+          <div class="hm-label">Tổ sấy TH</div>
+          <div class="hm-cell amber">3,0%</div>
+          <div class="hm-cell navy">1,5%</div>
+          <div class="hm-cell red">7,2%</div>
+        </div>
+        <div class="drill-hint">↗ Xem chi tiết</div>
+      </div>
+
+      <!-- TỔNG KẾT TRẠNG THÁI -->
+      <div class="card summary-card">
         <div class="card-header">
-          <span class="card-title">Stockout Heatmap</span>
+          <div class="card-title">TỔNG KẾT TRẠNG THÁI</div>
         </div>
-        <div class="hm-grid">
-          <!-- Headers -->
-          <div class="hm-cell hm-header"></div>
-          <div class="hm-cell hm-header">HCM</div>
-          <div class="hm-cell hm-header">HN</div>
-          <div class="hm-cell hm-header">ĐN</div>
-          <!-- R1 -->
-          <div class="hm-cell hm-row-label">Yến chưng</div>
-          <div class="hm-cell bg-red">6,0%</div>
-          <div class="hm-cell bg-navy">1,5%</div>
-          <div class="hm-cell bg-amber">3,2%</div>
-          <!-- R2 -->
-          <div class="hm-cell hm-row-label">Tinh chế</div>
-          <div class="hm-cell bg-navy">1,0%</div>
-          <div class="hm-cell bg-navy">0,5%</div>
-          <div class="hm-cell bg-navy">1,2%</div>
-          <!-- R3 -->
-          <div class="hm-cell hm-row-label">Cháo IQ</div>
-          <div class="hm-cell bg-amber">4,5%</div>
-          <div class="hm-cell bg-red">5,8%</div>
-          <div class="hm-cell bg-navy">1,8%</div>
-          <!-- R4 -->
-          <div class="hm-cell hm-row-label">Combo Tết</div>
-          <div class="hm-cell bg-navy">0,0%</div>
-          <div class="hm-cell bg-navy">0,0%</div>
-          <div class="hm-cell bg-navy">0,0%</div>
-          <!-- R5 -->
-          <div class="hm-cell hm-row-label">Nước yến</div>
-          <div class="hm-cell bg-navy">1,2%</div>
-          <div class="hm-cell bg-amber">2,5%</div>
-          <div class="hm-cell bg-navy">1,0%</div>
-          <!-- R6 -->
-          <div class="hm-cell hm-row-label">Tổ sấy TH</div>
-          <div class="hm-cell bg-amber">3,0%</div>
-          <div class="hm-cell bg-navy">1,5%</div>
-          <div class="hm-cell bg-red">7,2%</div>
+        
+        <div class="summary-row">
+          <div class="summary-label">KPI đạt mục tiêu</div>
+          <div class="summary-val white">5/10</div>
         </div>
-        <span class="card-drill-hint">↗ Xem chi tiết</span>
+        <div class="summary-progress-bg">
+          <div class="summary-progress-fill"></div>
+        </div>
+        
+        <div class="summary-row">
+          <div class="summary-label">Cần theo dõi</div>
+          <div class="summary-val amber">3</div>
+        </div>
+        
+        <div class="summary-row">
+          <div class="summary-label">Cần xử lý ngay</div>
+          <div class="summary-val red">2</div>
+        </div>
+        
+        <div class="summary-divider"></div>
+        <div class="summary-time live-update-time">Cập nhật: 09:00 · 01/06/2026</div>
       </div>
-
-      <!-- Row 4: Tổng Kết Trạng Thái (130px cố định) -->
-      <div class="card" style="background:var(--navy);border:none;">
-        <div style="font-size:11px;font-weight:600;color:rgba(255,255,255,0.6);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:8px;flex-shrink:0;">TỔNG KẾT</div>
-        <div style="display:flex;flex-direction:column;gap:4px;flex:1;">
-          <div>
-            <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;">
-              <span style="color:rgba(255,255,255,0.8);font-size:12px;font-weight:500;">KPI đạt mục tiêu</span>
-              <span style="color:#fff;font-size:18px;font-weight:700;font-family:'Playfair Display',serif;">5/10</span>
-            </div>
-            <div style="height:3px;background:rgba(255,255,255,0.15);border-radius:2px;overflow:hidden;">
-              <div style="height:100%;width:50%;background:var(--amber);border-radius:2px;"></div>
-            </div>
-          </div>
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;">
-            <span style="color:rgba(255,255,255,0.8);font-size:12px;font-weight:500;">Cần theo dõi</span>
-            <span style="color:var(--amber);font-size:18px;font-weight:700;font-family:'Playfair Display',serif;">3</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;">
-            <span style="color:rgba(255,255,255,0.8);font-size:12px;font-weight:500;">Cần xử lý ngay</span>
-            <span style="color:var(--red);font-size:18px;font-weight:700;font-family:'Playfair Display',serif;">2</span>
-          </div>
-          <div style="height:1px;background:rgba(255,255,255,0.12);margin-top:4px;flex-shrink:0;"></div>
-          <div style="font-size:10px;color:rgba(255,255,255,0.45);font-weight:500;margin-top:6px;flex-shrink:0;">09:00 &middot; 01/06/2026 &middot; vienviet.com.vn</div>
-        </div>
-      </div>
-
-    </div>
-
-  </main>
-
-  <!-- Modals -->
-  <div class="modal-overlay" id="modalOverlay" onclick="if(event.target===this)closeModal()">
-    <div class="modal-box" id="modalBox">
-      <span class="modal-close" onclick="closeModal()">×</span>
-      <div id="modalContent"></div>
     </div>
   </div>
 
-  <script>
-    Chart.defaults.font.family = "'Be Vietnam Pro', sans-serif";
-    Chart.defaults.font.size = 11;
-    Chart.defaults.color = "#777777";
+  <!-- FOOTER -->
+  <footer>
+    <div>Yến Việt · CEO Dashboard Layer 1 · Dữ liệu demo · yenviet.com.vn</div>
+    <div><span id="footer-period">Tháng này</span> · <span class="live-update-time">Cập nhật: 09:00 · 01/06/2026</span> · <span class="live-dot">● LIVE</span></div>
+  </footer>
 
-    const dataByPeriod = {
-      'thang': {
-        label: 'Tháng 6/2026',
-        revenue: { actual: 25.4, target: 26.0, pct: 97.7, trend: [18.5, 19.2, 21.0, 22.5, 24.0, 25.4] },
-        margin: { actual: 45.0, target: 48.0, trend: [42, 44, 44, 45, 47, 45] },
-        ebitda: { value: 3.7, margin: 14.8 },
+  <!-- MODAL -->
+  <div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
+    <div class="modal-box" onclick="event.stopPropagation()">
+      <div class="modal-close" onclick="closeModal()">&times;</div>
+      <div class="modal-title" id="modal-title">TITLE</div>
+      <div class="modal-content" id="modal-content">
+        <!-- Content injected via JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- JAVASCRIPT -->
+  <script>
+    // --- Data ---
+    const periodData = {
+      thang: {
+        label: 'Tháng này',
+        revenue: { val: 25.4, target: 26.0, pct: 97.7, trend: [18.5,19.2,21.0,22.5,24.0,25.4], badge: 'ĐẠT', color: 'navy', class: 'dat' },
+        margin:  { val: 45.0, target: 48.0, diff: 'Hụt 3,0', trend: [42,44,44,45,47,45], badge: 'CHÚ Ý', color: 'amber', class: 'chu_y' },
         mom: '+12,2%', yoy: '+18,5%',
-        channel: { offline: 12.0, shopee: 6.0, tiktok: 5.0, b2b: 2.4 },
-        ccc: { days: 42, dio: 28, dso: 22, dpo: 8 },
+        ebitda: { val: 3.7, margin: 14.8, progress: 74 },
+        channel: { total: 25.4, offline: 47.2, shopee: 23.6, tiktok: 19.7, b2b: 9.5 },
+        ccc: { days: 42, dio: 28, dso: 22, dpo: 8, sub: 'Cải thiện từ 47 ngày ↓', badge: 'CHÚ Ý', color: 'amber', class: 'chu_y' },
         otif: 94.2, coverage: 81
       },
-      'qtd': {
-        label: 'Q2/2026 (tích lũy)',
-        revenue: { actual: 71.2, target: 78.0, pct: 91.3, trend: [22.1, 23.7, 25.4, 0, 0, 0] },
-        margin: { actual: 44.5, target: 48.0, trend: [43, 44, 45, 44.5, 0, 0] },
-        ebitda: { value: 10.2, margin: 14.3 },
+      qtd: {
+        label: 'QTD',
+        revenue: { val: 71.2, target: 78.0, pct: 91.3, trend: [22.1,23.7,25.4,0,0,0], badge: 'CHÚ Ý', color: 'amber', class: 'chu_y' },
+        margin:  { val: 44.5, target: 48.0, diff: 'Hụt 3,5', trend: [43,44,45,44.5,0,0], badge: 'CHÚ Ý', color: 'amber', class: 'chu_y' },
         mom: '+8,5%', yoy: '+15,2%',
-        channel: { offline: 33.0, shopee: 17.5, tiktok: 14.2, b2b: 6.5 },
-        ccc: { days: 45, dio: 30, dso: 23, dpo: 8 },
+        ebitda: { val: 10.2, margin: 14.3, progress: 71.5 },
+        channel: { total: 71.2, offline: 46.3, shopee: 24.5, tiktok: 20.0, b2b: 9.2 },
+        ccc: { days: 45, dio: 30, dso: 23, dpo: 8, sub: 'Xấu đi từ 42 ngày ↑', badge: 'CHÚ Ý', color: 'amber', class: 'chu_y' },
         otif: 93.1, coverage: 79
       },
-      'ytd': {
-        label: 'YTD 2026 (tích lũy)',
-        revenue: { actual: 138.5, target: 156.0, pct: 88.8, trend: [18.5, 19.2, 21.0, 22.5, 24.0, 33.3] },
-        margin: { actual: 43.8, target: 48.0, trend: [42, 43, 44, 44, 45, 43.8] },
-        ebitda: { value: 19.8, margin: 14.3 },
+      ytd: {
+        label: 'YTD',
+        revenue: { val: 138.5, target: 156.0, pct: 88.8, trend: [18.5,19.2,21.0,22.5,24.0,33.3], badge: 'CHÚ Ý', color: 'amber', class: 'chu_y' },
+        margin:  { val: 43.8, target: 48.0, diff: 'Hụt 4,2', trend: [42,43,44,44,45,43.8], badge: 'NGUY HIỂM', color: 'red', class: 'nguy_hiem' },
         mom: '+5,2%', yoy: '+22,1%',
-        channel: { offline: 65.0, shopee: 33.5, tiktok: 27.0, b2b: 13.0 },
-        ccc: { days: 44, dio: 29, dso: 23, dpo: 8 },
+        ebitda: { val: 19.8, margin: 14.3, progress: 71.5 },
+        channel: { total: 138.5, offline: 46.9, shopee: 24.2, tiktok: 19.5, b2b: 9.4 },
+        ccc: { days: 44, dio: 29, dso: 23, dpo: 8, sub: 'Target ≤ 35 ngày', badge: 'CHÚ Ý', color: 'amber', class: 'chu_y' },
         otif: 92.8, coverage: 77
       }
     };
 
-    let currentPeriod = 'thang';
-    let revenueChart, marginChart;
+    // --- Chart Plugins & Configs ---
+    Chart.defaults.font.family = "'Be Vietnam Pro', sans-serif";
+    Chart.defaults.color = '#888';
 
-    function initCharts(period) {
-      const d = dataByPeriod[period];
-      if (revenueChart) revenueChart.destroy();
-      if (marginChart) marginChart.destroy();
+    const tooltipConfig = {
+      backgroundColor: '#134686',
+      titleColor: '#FDF4E3',
+      bodyColor: '#FFFFFF',
+      cornerRadius: 8,
+      padding: 10
+    };
 
-      const ctxSpark = document.getElementById('revenueSparkline').getContext('2d');
-      revenueChart = new Chart(ctxSpark, {
+    const needlePlugin = {
+      id: 'needle',
+      afterDatasetsDraw(chart) {
+        const { ctx } = chart;
+        const meta = chart.getDatasetMeta(0);
+        if (!meta.data.length) return;
+        const arc = meta.data[0];
+        const { x, y } = arc;
+        const innerR = arc.innerRadius;
+        const outerR = arc.outerRadius;
+        const needleLen = innerR + (outerR - innerR) * 0.7;
+        const value = 0.8, min = 0, max = 5;
+        const angle = Math.PI * (-1 + (value - min) / (max - min));
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(angle);
+        ctx.beginPath();
+        ctx.moveTo(0, -3);
+        ctx.lineTo(needleLen, 0);
+        ctx.lineTo(0, 3);
+        ctx.closePath();
+        ctx.fillStyle = '#333';
+        ctx.fill();
+        ctx.rotate(-angle);
+        ctx.beginPath();
+        ctx.arc(0, 0, 8, 0, Math.PI * 2);
+        ctx.fillStyle = '#333';
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(0, 0, 3.5, 0, Math.PI * 2);
+        ctx.fillStyle = '#fff';
+        ctx.fill();
+        ctx.restore();
+      }
+    };
+
+    let revChartInstance = null;
+    let marginChartInstance = null;
+    let gaugeChartInstance = null;
+
+    function initCharts(periodKey) {
+      const data = periodData[periodKey];
+
+      // 1. Revenue Sparkline
+      const ctxRev = document.getElementById('revChart').getContext('2d');
+      if (revChartInstance) revChartInstance.destroy();
+      revChartInstance = new Chart(ctxRev, {
         type: 'line',
         data: {
           labels: ['T1', 'T2', 'T3', 'T4', 'T5', 'T6'],
           datasets: [{
-            label: 'Thực tế',
-            data: d.revenue.trend,
+            data: data.revenue.trend,
             borderColor: '#134686',
-            borderWidth: 2,
+            backgroundColor: 'rgba(19,70,134,0.06)',
+            fill: true,
             tension: 0.4,
-            pointRadius: 3,
-            pointBackgroundColor: '#134686',
-            pointBorderColor: '#FFFFFF',
-            pointBorderWidth: 1.5
+            pointRadius: 2,
+            pointBackgroundColor: '#134686'
           }]
         },
         options: {
@@ -1013,55 +1181,49 @@
           plugins: {
             legend: { display: false },
             tooltip: {
-              enabled: true,
-              backgroundColor: '#134686',
-              titleColor: '#FDF4E3',
-              bodyColor: '#FFFFFF',
-              titleFont: { family: "'Be Vietnam Pro', sans-serif", size: 11, weight: '600' },
-              bodyFont: { family: "'Be Vietnam Pro', sans-serif", size: 12, weight: '700' },
-              padding: 8,
-              cornerRadius: 8,
-              callbacks: {
-                title: (items) => 'Doanh thu ' + items[0].label,
-                label: (item) => item.parsed.y.toFixed(1).replace('.', ',') + ' tỷ đồng'
-              }
+              ...tooltipConfig,
+              callbacks: { label: (ctx) => `Tháng ${ctx.label}: ${ctx.raw} tỷ đồng` }
             }
           },
-          scales: { x: { display: false }, y: { display: false, min: 18 } }
+          scales: {
+            x: { display: false },
+            y: { display: false, min: 0 }
+          },
+          layout: { padding: { top: 5, bottom: 5 } }
         }
       });
 
-      const ctxMargin = document.getElementById('marginLineChart').getContext('2d');
-      let gradientMargin = ctxMargin.createLinearGradient(0, 0, 0, 80);
-      gradientMargin.addColorStop(0, 'rgba(254, 178, 26, 0.35)');
-      gradientMargin.addColorStop(1, 'rgba(254, 178, 26, 0)');
+      // 2. Margin Chart
+      const ctxMargin = document.getElementById('marginChart').getContext('2d');
+      if (marginChartInstance) marginChartInstance.destroy();
+      
+      const gradient = ctxMargin.createLinearGradient(0, 0, 0, 110);
+      gradient.addColorStop(0, 'rgba(254,178,26,0.3)');
+      gradient.addColorStop(1, 'rgba(254,178,26,0.0)');
 
-      marginChart = new Chart(ctxMargin, {
+      marginChartInstance = new Chart(ctxMargin, {
         type: 'line',
         data: {
           labels: ['T1', 'T2', 'T3', 'T4', 'T5', 'T6'],
           datasets: [
             {
               label: 'Thực tế',
-              data: d.margin.trend,
+              data: data.margin.trend,
               borderColor: '#FEB21A',
-              borderWidth: 2,
-              tension: 0.4,
+              backgroundColor: gradient,
               fill: true,
-              backgroundColor: gradientMargin,
+              tension: 0.3,
               pointRadius: 3,
-              pointBackgroundColor: '#FEB21A',
-              pointBorderColor: '#FFFFFF',
-              pointBorderWidth: 1.5
+              pointBackgroundColor: '#FEB21A'
             },
             {
               label: 'Target',
               data: [48, 48, 48, 48, 48, 48],
-              borderColor: 'rgba(237, 63, 39, 0.35)',
-              borderWidth: 1.5,
-              borderDash: [4, 4],
+              borderColor: 'rgba(237,63,39,0.35)',
+              borderDash: [5, 4],
               pointRadius: 0,
-              fill: false
+              fill: false,
+              tension: 0
             }
           ]
         },
@@ -1071,236 +1233,257 @@
           plugins: {
             legend: { display: false },
             tooltip: {
-              enabled: true,
-              backgroundColor: '#134686',
-              titleColor: '#FDF4E3',
-              bodyColor: '#FFFFFF',
-              titleFont: { family: "'Be Vietnam Pro', sans-serif", size: 11, weight: '600' },
-              bodyFont: { family: "'Be Vietnam Pro', sans-serif", size: 12, weight: '700' },
-              padding: 8,
-              cornerRadius: 8,
+              ...tooltipConfig,
+              mode: 'index',
+              intersect: false,
               callbacks: {
-                title: (items) => items[0].dataset.label === 'Target' ? 'Mục tiêu Gross Margin' : 'Gross Margin — ' + items[0].label,
-                label: (item) => item.parsed.y.toFixed(1).replace('.', ',') + '%'
+                label: (ctx) => `${ctx.dataset.label}: ${ctx.raw}%`
               }
             }
           },
           scales: {
-            x: { grid: { display: false } },
-            y: {
-              min: 40, max: 55,
-              grid: { color: '#F0F0F0' },
-              border: { display: false },
-              ticks: { callback: v => v + '%', stepSize: 5 }
+            x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+            y: { 
+              min: 40, max: 52, 
+              ticks: { stepSize: 4, callback: (val) => val + '%', font: { size: 10 } },
+              border: { display: false }
             }
           }
         }
       });
+
+      // 3. Gauge Chart
+      if (!gaugeChartInstance) {
+        const ctxGauge = document.getElementById('gaugeChart').getContext('2d');
+        gaugeChartInstance = new Chart(ctxGauge, {
+          type: 'doughnut',
+          data: {
+            labels: ['An toàn', 'Nguy hiểm'],
+            datasets: [{
+              data: [10, 90],
+              backgroundColor: ['#134686', '#ED3F27'],
+              borderWidth: 0,
+              cutout: '70%'
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            rotation: -90,
+            circumference: 180,
+            plugins: {
+              legend: { display: false },
+              tooltip: { enabled: false }
+            }
+          },
+          plugins: [needlePlugin]
+        });
+      }
     }
 
-    function updateDashboard(period) {
-      const d = dataByPeriod[period];
-      currentPeriod = period;
+    // --- Interaction Logic ---
+    window.setPeriod = function(periodKey) {
+      // Update pills
+      document.querySelectorAll('.pill').forEach(el => el.classList.remove('active'));
+      event.target.classList.add('active');
 
-      document.getElementById('rev-actual').textContent = d.revenue.actual.toFixed(1).replace('.', ',') + ' tỷ';
-      document.getElementById('rev-subtitle').textContent = 'Mục tiêu: ' + d.revenue.target.toFixed(1).replace('.', ',') + ' tỷ · Đạt ' + d.revenue.pct.toFixed(1).replace('.', ',') + '%';
-      document.getElementById('rev-progress').style.width = d.revenue.pct + '%';
+      const d = periodData[periodKey];
 
-      const revBadge = document.getElementById('rev-badge');
-      if (d.revenue.pct >= 95) { revBadge.textContent = 'ĐẠT'; revBadge.className = 'rag-badge bg-navy'; }
-      else if (d.revenue.pct >= 80) { revBadge.textContent = 'CHÚ Ý'; revBadge.className = 'rag-badge bg-amber'; }
-      else { revBadge.textContent = 'NGUY HIỂM'; revBadge.className = 'rag-badge bg-red'; }
+      // Update Revenue
+      document.getElementById('rev-val').textContent = d.revenue.val.toString().replace('.', ',') + ' tỷ';
+      document.getElementById('rev-val').className = `big-number ${d.revenue.color}`;
+      document.getElementById('rev-sub').textContent = `Mục tiêu ${d.revenue.target.toString().replace('.', ',')} tỷ · Đạt ${d.revenue.pct.toString().replace('.', ',')}%`;
+      document.getElementById('rev-progress').style.width = `${d.revenue.pct}%`;
+      document.getElementById('rev-progress').className = `progress-bar-fill ${d.revenue.color}`;
+      document.getElementById('rev-badge').textContent = d.revenue.badge;
+      document.getElementById('rev-badge').className = `badge ${d.revenue.class}`;
 
-      document.getElementById('margin-actual').textContent = d.margin.actual.toFixed(1).replace('.', ',') + '%';
-      const marginBadge = document.getElementById('margin-badge');
-      const marginGap = d.margin.actual - d.margin.target;
-      if (marginGap >= 0) { marginBadge.textContent = 'ĐẠT'; marginBadge.className = 'rag-badge bg-navy'; }
-      else if (marginGap >= -3) { marginBadge.textContent = 'CHÚ Ý'; marginBadge.className = 'rag-badge bg-amber'; }
-      else { marginBadge.textContent = 'NGUY HIỂM'; marginBadge.className = 'rag-badge bg-red'; }
+      // Update Margin
+      document.getElementById('margin-val').textContent = d.margin.val.toString().replace('.', ',') + '%';
+      document.getElementById('margin-val').className = `big-number ${d.margin.color}`;
+      document.getElementById('margin-sub').textContent = `Mục tiêu ${d.margin.target.toString().replace('.', ',')}% · ${d.margin.diff} điểm %`;
+      document.getElementById('margin-badge').textContent = d.margin.badge;
+      document.getElementById('margin-badge').className = `badge ${d.margin.class}`;
 
-      document.getElementById('growth-mom').textContent = d.mom;
-      document.getElementById('growth-yoy').textContent = d.yoy;
-      document.getElementById('ebitda-val').textContent = d.ebitda.value.toFixed(1).replace('.', ',') + ' tỷ';
-      document.getElementById('ebitda-margin').textContent = 'Margin ' + d.ebitda.margin.toFixed(1).replace('.', ',') + '% · Target 13,0%';
+      // Update Growth & EBITDA
+      document.getElementById('mom-val').textContent = d.mom;
+      document.getElementById('yoy-val').textContent = d.yoy;
+      document.getElementById('ebitda-val').textContent = d.ebitda.val.toString().replace('.', ',') + ' tỷ';
+      document.getElementById('ebitda-sub').textContent = `Margin ${d.ebitda.margin.toString().replace('.', ',')}% · Target 13,0%`;
+      document.getElementById('ebitda-progress').style.width = `${d.ebitda.progress}%`;
 
-      document.getElementById('ccc-days').textContent = d.ccc.days + ' ngày';
-      document.getElementById('ccc-dio').textContent = 'DIO: ' + d.ccc.dio;
-      document.getElementById('ccc-dso').textContent = 'DSO: ' + d.ccc.dso;
-      document.getElementById('ccc-dpo').textContent = 'DPO: ' + d.ccc.dpo;
-      const cccBadge = document.getElementById('ccc-badge');
-      if (d.ccc.days <= 35) { cccBadge.textContent = 'TỐT'; cccBadge.className = 'rag-badge bg-navy'; }
-      else if (d.ccc.days <= 50) { cccBadge.textContent = 'CHÚ Ý'; cccBadge.className = 'rag-badge bg-amber'; }
-      else { cccBadge.textContent = 'NGUY HIỂM'; cccBadge.className = 'rag-badge bg-red'; }
+      // Update Channel Total & Bar
+      document.getElementById('ch-total').textContent = d.channel.total.toString().replace('.', ',') + ' tỷ';
+      document.getElementById('seg-offline').style.width = `${d.channel.offline}%`;
+      document.getElementById('seg-offline').textContent = `${d.channel.offline}%`;
+      document.getElementById('seg-shopee').style.width = `${d.channel.shopee}%`;
+      document.getElementById('seg-shopee').textContent = `${d.channel.shopee}%`;
+      document.getElementById('seg-tiktok').style.width = `${d.channel.tiktok}%`;
+      document.getElementById('seg-tiktok').textContent = `${d.channel.tiktok}%`;
+      document.getElementById('seg-b2b').style.width = `${d.channel.b2b}%`;
+      document.getElementById('seg-b2b').textContent = `${d.channel.b2b}%`;
 
-      const total = d.channel.offline + d.channel.shopee + d.channel.tiktok + d.channel.b2b;
-      document.getElementById('ch-total').textContent = total.toFixed(1).replace('.', ',') + ' tỷ đồng';
-      document.getElementById('seg-offline').style.width = (d.channel.offline / total * 100).toFixed(1) + '%';
-      document.getElementById('seg-offline').textContent = d.channel.offline.toFixed(1).replace('.', ',');
-      document.getElementById('seg-shopee').style.width = (d.channel.shopee / total * 100).toFixed(1) + '%';
-      document.getElementById('seg-shopee').textContent = d.channel.shopee.toFixed(1).replace('.', ',');
-      document.getElementById('seg-tiktok').style.width = (d.channel.tiktok / total * 100).toFixed(1) + '%';
-      document.getElementById('seg-tiktok').textContent = d.channel.tiktok.toFixed(1).replace('.', ',');
-      document.getElementById('seg-b2b').style.width = (d.channel.b2b / total * 100).toFixed(1) + '%';
-      document.getElementById('seg-b2b').textContent = d.channel.b2b.toFixed(1).replace('.', ',');
+      // Update OTIF & Coverage
+      document.getElementById('otif-val').textContent = d.otif.toString().replace('.', ',') + '%';
+      document.getElementById('coverage-val').textContent = d.coverage + '/100';
 
-      document.getElementById('otif-val').textContent = d.otif.toFixed(1).replace('.', ',') + '%';
-      document.getElementById('coverage-val').textContent = d.coverage + ' / 100';
+      // Update CCC
+      document.getElementById('ccc-val').textContent = `${d.ccc.days} ngày`;
+      document.getElementById('ccc-val').className = `big-number ${d.ccc.color}`;
+      document.getElementById('ccc-sub').textContent = `Target ≤ 35 ngày · ${d.ccc.sub}`;
+      document.getElementById('ccc-badge').textContent = d.ccc.badge;
+      document.getElementById('ccc-badge').className = `badge ${d.ccc.class}`;
+      document.getElementById('ccc-dio').textContent = `DIO: ${d.ccc.dio} ngày`;
+      document.getElementById('ccc-dso').textContent = `DSO: ${d.ccc.dso} ngày`;
+      document.getElementById('ccc-dpo').textContent = `DPO: ${d.ccc.dpo} ngày`;
 
-      initCharts(period);
-      document.getElementById('period-label').textContent = d.label;
+      // Update Footer label
+      document.getElementById('footer-period').textContent = d.label;
+
+      // Re-init charts with new data
+      initCharts(periodKey);
     }
 
-    document.querySelectorAll('.filter-pill').forEach(pill => {
-      pill.addEventListener('click', function () {
-        document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
-        this.classList.add('active');
-        const map = { 'Tháng này': 'thang', 'QTD': 'qtd', 'YTD': 'ytd' };
-        updateDashboard(map[this.textContent.trim()]);
-      });
-    });
-
-    function openModal(cardId) {
-      const modals = {
-        'revenue': {
-          title: 'Tổng Doanh Thu — Chi Tiết',
-          subtitle: 'Phân tích theo kênh và sản phẩm · Tháng 6/2026',
-          kpis: [
-            { label: 'Offline', val: '12,0 tỷ', delta: '+8,2% MoM' },
-            { label: 'TMĐT', val: '11,0 tỷ', delta: '+18,5% MoM' },
-            { label: 'B2B', val: '2,4 tỷ', delta: '+3,1% MoM' }
-          ],
-          insight: '📈 Kênh TMĐT đang tăng trưởng mạnh nhất (+18,5% MoM). TikTok Shop cần tăng ngân sách quảng cáo để duy trì đà. Offline vẫn chiếm 47% — cần theo dõi same-store growth.'
-        },
-        'margin': {
-          title: 'Gross Margin — Chi Tiết',
-          subtitle: 'Phân tích biên lợi nhuận theo kênh · Tháng 6/2026',
-          kpis: [
-            { label: 'Offline', val: '51,2%', delta: '↑ Tốt nhất' },
-            { label: 'Shopee', val: '38,5%', delta: '⚠ Phí sàn cao' },
-            { label: 'TikTok', val: '33,2%', delta: '⚠ Phí ~45%' }
-          ],
-          insight: '⚠️ Gross Margin hụt 3 điểm % so target chủ yếu do phí sàn TMĐT. Shopee đang tính phí 39,5% doanh thu, TikTok Shop ~45,6%. CEO cần xem xét điều chỉnh giá bán trên sàn.'
-        },
-        'ccc': {
-          title: 'Cash Conversion Cycle — Chi Tiết',
-          subtitle: 'Phân tích vòng quay tiền · Tháng 6/2026',
-          kpis: [
-            { label: 'DIO', val: '28 ngày', delta: 'Inventory days' },
-            { label: 'DSO', val: '22 ngày', delta: 'Receivable days' },
-            { label: 'DPO', val: '8 ngày', delta: 'Payable days' }
-          ],
-          insight: '💡 CCC = 42 ngày, cải thiện từ 47 ngày (tháng trước). Cơ hội rút ngắn: (1) Tăng DPO lên 15–20 ngày bằng cách đàm phán lại điều khoản nhà cung cấp. (2) Giảm DSO bằng cách siết chặt công nợ đại lý.'
-        },
-        'stockout': {
-          title: 'Stockout Heatmap — Chi Tiết',
-          subtitle: 'Điểm nóng cần bổ sung hàng ngay · Tháng 6/2026',
-          kpis: [
-            { label: 'Yến chưng HCM', val: '6,0%', delta: '🔴 Nguy hiểm' },
-            { label: 'Cháo Nest IQ HN', val: '5,8%', delta: '🔴 Nguy hiểm' },
-            { label: 'Tổ yến sấy ĐN', val: '7,2%', delta: '🔴 Cao nhất' }
-          ],
-          insight: '🚨 3 điểm cần bổ sung hàng KHẨN: Yến chưng 20 lọ tại HCM, Cháo Nest IQ tại HN, Tổ yến sấy thăng hoa tại Đà Nẵng. Đề xuất: điều phối từ kho dư sang kho thiếu trong 24h.'
-        },
-        'defect': {
-          title: 'Defect & Khiếu Nại — Chi Tiết',
-          subtitle: 'Theo dõi chất lượng sản phẩm · Tháng 6/2026',
-          kpis: [
-            { label: 'Defect Rate', val: '0,8%', delta: '🔴 Vượt ngưỡng' },
-            { label: 'Khiếu nại', val: '1 ca', delta: 'Lô SX 12/05' },
-            { label: 'Target', val: '< 0,5%', delta: 'Chưa đạt' }
-          ],
-          insight: '🚨 HÀNH ĐỘNG NGAY: Thu hồi và kiểm tra toàn bộ lô sản xuất 12/05. Liên hệ khách hàng khiếu nại trong 24h. Kiểm tra lab độc lập trước khi phân phối thêm lô này. Báo cáo lên QA Director ngay hôm nay.'
-        }
-      };
-      const m = modals[cardId];
-      if (!m) return;
-      document.getElementById('modalContent').innerHTML = `
-        <div class="modal-title">${m.title}</div>
-        <div class="modal-subtitle">${m.subtitle}</div>
-        <div class="modal-kpi-grid">
-          ${m.kpis.map(k => `
-            <div class="modal-kpi">
-              <div class="modal-kpi-label">${k.label}</div>
-              <div class="modal-kpi-val">${k.val}</div>
-              <div class="modal-kpi-delta">${k.delta}</div>
-            </div>`).join('')}
-        </div>
-        <div class="modal-section-title">Insight & Hành Động Đề Xuất</div>
-        <div class="modal-insight">${m.insight}</div>
-      `;
-      document.getElementById('modalOverlay').classList.add('active');
-    }
-
-    function closeModal() {
-      document.getElementById('modalOverlay').classList.remove('active');
-    }
-
-    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
-
-    /* Needle Plugin for Defect Gauge */
-    const needlePlugin = {
-      id: 'needle',
-      afterDatasetsDraw(chart) {
-        const { ctx } = chart;
-        const meta = chart.getDatasetMeta(0);
-        const arc = meta.data[0];
-        const { x, y } = arc;
-        const innerR = arc.innerRadius;
-        const outerR = arc.outerRadius;
-        const needleLen = innerR + (outerR - innerR) * 0.65;
-
-        const minVal = 0, maxVal = 5, value = 0.8;
-        const angle = Math.PI * (-1 + (value - minVal) / (maxVal - minVal));
-
-        ctx.save();
-        ctx.translate(x, y);
-        ctx.rotate(angle);
-        ctx.beginPath();
-        ctx.moveTo(0, -3);
-        ctx.lineTo(needleLen, 0);
-        ctx.lineTo(0, 3);
-        ctx.closePath();
-        ctx.fillStyle = '#333333';
-        ctx.fill();
-        ctx.rotate(-angle);
-        ctx.beginPath();
-        ctx.arc(0, 0, 7, 0, Math.PI * 2);
-        ctx.fillStyle = '#333333';
-        ctx.fill();
-        ctx.beginPath();
-        ctx.arc(0, 0, 3, 0, Math.PI * 2);
-        ctx.fillStyle = '#FFFFFF';
-        ctx.fill();
-        ctx.restore();
+    // Modal Logic
+    const modals = {
+      revenue: {
+        title: "CHI TIẾT DOANH THU",
+        content: `
+          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px;">
+            <div>
+              <div style="color: var(--text-sub); font-size: 11px;">OFFLINE</div>
+              <div style="font-family: var(--font-display); font-size: 20px; color: var(--primary);">12,0 tỷ</div>
+              <div style="color: #4CAF50; font-size: 11px;">↑ 5,2% YoY</div>
+            </div>
+            <div>
+              <div style="color: var(--text-sub); font-size: 11px;">THƯƠNG MẠI ĐIỆN TỬ</div>
+              <div style="font-family: var(--font-display); font-size: 20px; color: var(--primary);">11,0 tỷ</div>
+              <div style="color: #4CAF50; font-size: 11px;">↑ 24,5% YoY</div>
+            </div>
+            <div>
+              <div style="color: var(--text-sub); font-size: 11px;">B2B / DOANH NGHIỆP</div>
+              <div style="font-family: var(--font-display); font-size: 20px; color: var(--primary);">2,4 tỷ</div>
+              <div style="color: var(--alert); font-size: 11px;">↓ 2,1% YoY</div>
+            </div>
+          </div>
+          <div class="insight-box">
+            <strong>Insight:</strong> Kênh TMĐT (đặc biệt TikTok Shop) đang đóng góp lớn nhất vào tăng trưởng. Cần phân bổ thêm ngân sách MKT để vít scale doanh thu Q3.
+          </div>
+        `
+      },
+      margin: {
+        title: "PHÂN TÍCH BIÊN LỢI NHUẬN GỘP",
+        content: `
+          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px;">
+            <div>
+              <div style="color: var(--text-sub); font-size: 11px;">MARGIN OFFLINE</div>
+              <div style="font-family: var(--font-display); font-size: 20px; color: var(--primary);">48,5%</div>
+              <div style="font-size: 11px; color: #888;">Đạt Target</div>
+            </div>
+            <div>
+              <div style="color: var(--text-sub); font-size: 11px;">MARGIN SHOPEE</div>
+              <div style="font-family: var(--font-display); font-size: 20px; color: var(--warning);">41,2%</div>
+              <div style="font-size: 11px; color: var(--alert);">Dưới Target (45%)</div>
+            </div>
+            <div>
+              <div style="color: var(--text-sub); font-size: 11px;">MARGIN TIKTOK</div>
+              <div style="font-family: var(--font-display); font-size: 20px; color: var(--alert);">38,0%</div>
+              <div style="font-size: 11px; color: var(--alert);">Báo động</div>
+            </div>
+          </div>
+          <div class="insight-box" style="border-left-color: var(--alert);">
+            <strong>Cảnh báo:</strong> Chi phí sàn (phí thanh toán + phí cố định + trợ giá Xtra) của TikTok & Shopee đã tăng trung bình 2,5%. Cần xem lại cấu trúc giá bán lẻ TMĐT và thiết kế lại combo để tối ưu margin.
+          </div>
+        `
+      },
+      ccc: {
+        title: "CASH CONVERSION CYCLE",
+        content: `
+          <ul style="margin-left: 20px; margin-bottom: 16px; color: var(--text-main);">
+            <li style="margin-bottom: 8px;"><strong>DIO (Ngày tồn kho): 28 ngày.</strong> Đã cải thiện so với tháng trước (32 ngày) nhờ giải phóng lô yến tinh chế cận date.</li>
+            <li style="margin-bottom: 8px;"><strong>DSO (Ngày thu tiền): 22 ngày.</strong> Đang bị kéo dài do kênh chuỗi siêu thị thanh toán chậm.</li>
+            <li><strong>DPO (Ngày trả tiền): 8 ngày.</strong> Đang thanh toán nhà cung cấp bao bì quá sớm.</li>
+          </ul>
+          <div class="insight-box">
+            <strong>Cơ hội cải thiện:</strong> Đàm phán kéo dài công nợ với NCC bao bì và nhà yến lên 15-20 ngày để tối ưu dòng tiền lưu động.
+          </div>
+        `
+      },
+      stockout: {
+        title: "HÀNH ĐỘNG KHẨN - STOCKOUT",
+        content: `
+          <div style="margin-bottom: 16px;">
+            <strong>3 điểm đỏ cần bổ sung hàng gấp:</strong>
+          </div>
+          <ul style="margin-left: 20px; margin-bottom: 16px; color: var(--text-main);">
+            <li style="margin-bottom: 8px;"><strong>Tổ sấy TH tại Đà Nẵng (Out 7,2%):</strong> Lỗi do kho trung chuyển hụt tồn. Cần điều chuyển từ kho HCM ngay hôm nay.</li>
+            <li style="margin-bottom: 8px;"><strong>Yến chưng tại HCM (Out 6,0%):</strong> Nhu cầu mua lẻ tăng vọt dịp lễ. Đã hối thúc xưởng đóng gói.</li>
+            <li><strong>Cháo IQ tại HN (Out 5,8%):</strong> Phân phối chuỗi mẹ & bé M-kids đang đứt hàng.</li>
+          </ul>
+          <div class="insight-box" style="border-left-color: var(--alert); background: #FFF5F5; color: #7B1111;">
+            <strong>Đề xuất:</strong> Approve chi phí vận chuyển chành xe hỏa tốc (khoảng 15tr) để cover hàng cho Đà Nẵng và HN trong 24h.
+          </div>
+        `
+      },
+      defect: {
+        title: "QUẢN LÝ CHẤT LƯỢNG & KHIẾU NẠI",
+        content: `
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+            <div>
+              <div style="color: var(--text-sub); font-size: 11px;">DEFECT RATE (TỶ LỆ LỖI SX)</div>
+              <div style="font-family: var(--font-display); font-size: 20px; color: var(--alert);">0,8%</div>
+              <div style="color: var(--alert); font-size: 11px;">Vượt ngưỡng (0,5%)</div>
+            </div>
+            <div>
+              <div style="color: var(--text-sub); font-size: 11px;">SỐ LƯỢNG KHIẾU NẠI MỚI</div>
+              <div style="font-family: var(--font-display); font-size: 20px; color: var(--warning);">3 Case</div>
+            </div>
+          </div>
+          <div class="insight-box" style="border-left-color: var(--alert); background: #FFF5F5; color: #7B1111;">
+            <strong>Hành động khẩn:</strong> Có 1 case khiếu nại khách hàng V.I.P phát hiện cặn bất thường trong lô Nước Yến Đông Trùng Hạ Thảo. Đã cô lập toàn bộ tồn kho lô này chờ QA kiểm tra lại (nghi vấn tương tác kết tủa tự nhiên của sợi đông trùng). Bộ phận CSKH đang deal đền bù 1 đổi 3 và gửi mẫu test viện Pasteur.
+          </div>
+        `
       }
     };
 
-    const ctxDefect = document.getElementById('defectGauge').getContext('2d');
-    new Chart(ctxDefect, {
-      type: 'doughnut',
-      data: {
-        datasets: [{
-          data: [10, 90],
-          backgroundColor: ['#134686', '#ED3F27'],
-          borderWidth: 0,
-          borderRadius: [4, 4]
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        rotation: -90,
-        circumference: 180,
-        cutout: '70%',
-        plugins: { legend: { display: false }, tooltip: { enabled: false } },
-        layout: { padding: { bottom: 0 } }
-      },
-      plugins: [needlePlugin]
+    window.openModal = function(key) {
+      if (!modals[key]) return;
+      document.getElementById('modal-title').textContent = modals[key].title;
+      document.getElementById('modal-content').innerHTML = modals[key].content;
+      document.getElementById('modal-overlay').classList.add('show');
+      document.body.style.overflow = 'hidden';
+    }
+
+    window.closeModal = function(e) {
+      document.getElementById('modal-overlay').classList.remove('show');
+      document.body.style.overflow = 'auto';
+    }
+
+    document.addEventListener('keydown', function(event) {
+      if (event.key === "Escape") {
+        closeModal();
+      }
     });
 
-    initCharts('thang');
-    updateDashboard('thang');
+    function updateLiveTime() {
+      const now = new Date();
+      const hh = String(now.getHours()).padStart(2, '0');
+      const mm = String(now.getMinutes()).padStart(2, '0');
+      const dd = String(now.getDate()).padStart(2, '0');
+      const mo = String(now.getMonth() + 1).padStart(2, '0');
+      const yyyy = now.getFullYear();
+      const timeStr = `Cập nhật: ${hh}:${mm} · ${dd}/${mo}/${yyyy}`;
+      document.querySelectorAll('.live-update-time').forEach(el => {
+        el.textContent = timeStr;
+      });
+    }
+
+    // Init first time
+    window.onload = () => {
+      updateLiveTime();
+      setInterval(updateLiveTime, 10000); // Cập nhật lại mỗi 10 giây
+      initCharts('thang');
+    };
   </script>
 </body>
-
 </html>
